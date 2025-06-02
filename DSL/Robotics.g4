@@ -17,13 +17,13 @@ componentAttr   : PERIOD    EQUAL duration
                 | PRIORITY  EQUAL INT
                 ;
 
-connectDecl     : CONNECT endpoint ARROW endpoint connectBody? ;
+connectDecl     : CONNECT src=endpoint ARROW dst=endpoint connectBody? ;
 connectBody     : LBRACE LATENCY_BUDGET EQUAL duration SEMI RBRACE ;
-endpoint        : ID DOT ID ;                    // e.g. CameraProcessing.output
+endpoint        : comp=ID DOT port=ID ;                    // e.g. CameraProcessing.output
 
 propertyDecl    : PROPERTY ID COLON STRING SEMI ;
 
-duration        : INT UNIT_MS ;                  // “33 ms”, “5 ms” …
+duration        : INT UNIT_MS ;
 
 /* ────────────
  *  LEXER RULES
