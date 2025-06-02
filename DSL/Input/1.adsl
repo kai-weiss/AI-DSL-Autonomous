@@ -1,0 +1,13 @@
+COMPONENT CameraProcessing {
+    period = 33ms;
+    WCET = 20ms;
+    priority = 3;
+}
+COMPONENT PathPlanning {
+    period = 100ms;
+    deadline = 100ms;
+    WCET = 30ms;
+    priority = 2;
+}
+CONNECT CameraProcessing.output -> PathPlanning.input { latency_budget = 5ms; }
+PROPERTY EndToEndLatency: "CameraProcessing to PathPlanning response within 100 ms";
