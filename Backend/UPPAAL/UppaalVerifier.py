@@ -7,10 +7,11 @@ import os
 
 class UppaalVerifier:
     def __init__(self, verifyta: str = "verifyta"):
+        # This assumes verifyta is already installed on your system
         self.verifyta = verifyta
 
     def check(self, model: Model, props: list[str]) -> dict:
-        """Run UPPAAL verifyta on the given model for the selected properties"""
+        """Run UPPAAL verifyta on the given model for the selected properties."""
         xml_path = self._build_model(model)
 
         results: dict[str, bool | None] = {}
@@ -32,6 +33,7 @@ class UppaalVerifier:
                     text=True,
                 )
                 out = proc.stdout.lower()
+                print(out)
                 results[prop] = "property is satisfied" in out or "pass" in out
             except FileNotFoundError:
                 results[prop] = None
@@ -42,11 +44,13 @@ class UppaalVerifier:
         return results
 
     def _build_model(self, model: Model) -> str:
-        """Translate the DSL model into a minimal UPPAAL XML and return its path"""
+        """Translate the DSL model into a minimal UPPAAL XML and return its path."""
         nta = ET.Element("nta")
 
         system = ET.SubElement(nta, "system")
-        system.text = "system " + ", ".join(model.components.keys()) + ";"
+
+        decls: list[str] = []
+        proc_names: list[str] = []
 
         for comp in model.components.values():
             template = ET.SubElement(nta, "template")
@@ -54,6 +58,11 @@ class UppaalVerifier:
             ET.SubElement(template, "declaration").text = "clock x;"
             loc = ET.SubElement(template, "location", id=f"{comp.name}_Init")
             ET.SubElement(loc, "name").text = "Init"
+
+            decls.append(f"{comp.name} = {comp.name}();")
+            proc_names.append(comp.name)
+
+        system.text = "\n".join(decls + [f"system {', '.join(proc_names)};"])
 
         with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as xf:
             xf.write(ET.tostring(nta, encoding="unicode"))

@@ -18,6 +18,5 @@ def main(dsl_file: str):
 
 
 if __name__ == "__main__":
-    import sys
-    file = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).parent/"DSL"/"Input"/"1.adsl")
+    file = r"C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/1.adsl"
     main(file)

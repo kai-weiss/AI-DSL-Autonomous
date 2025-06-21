@@ -2,10 +2,10 @@ from antlr4 import InputStream, CommonTokenStream
 from antlr4.tree.Tree import ParseTree
 from pathlib import Path
 
-from Robotics.RoboticsLexer import RoboticsLexer
-from Robotics.RoboticsParser import RoboticsParser
-from visitor import ASTBuilder
-from metamodel import Model
+from DSL.Robotics.RoboticsLexer import RoboticsLexer
+from DSL.Robotics.RoboticsParser import RoboticsParser
+from DSL.visitor import ASTBuilder
+from DSL.metamodel import Model
 
 
 def parse_source(text: str) -> ParseTree:

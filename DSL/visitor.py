@@ -1,6 +1,6 @@
-from Robotics.RoboticsParser import RoboticsParser
-from Robotics.RoboticsVisitor import RoboticsVisitor
-from metamodel import Model, Component, Connection
+from DSL.Robotics.RoboticsParser import RoboticsParser
+from DSL.Robotics.RoboticsVisitor import RoboticsVisitor
+from DSL.metamodel import Model, Component, Connection
 from datetime import timedelta
 
 
