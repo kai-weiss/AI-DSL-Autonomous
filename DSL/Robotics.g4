@@ -1,4 +1,4 @@
-grammar Robotics;                 // file name = Robotics.g4
+grammar Robotics;
 
 /* ─────────────
  *  PARSER RULES

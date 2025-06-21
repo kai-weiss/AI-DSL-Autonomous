@@ -34,6 +34,16 @@ class ASTBuilder(RoboticsVisitor):
         )
         return None
 
+    # propertyDecl : PROPERTY ID COLON STRING SEMI ;
+    def visitPropertyDecl(self, ctx: RoboticsParser.PropertyDeclContext):
+        prop_id = ctx.ID().getText()
+        text = ctx.STRING().getText()
+        # strip surrounding quotes
+        if text.startswith('"') and text.endswith('"'):
+            text = text[1:-1]
+        self.model.properties[prop_id] = text
+        return None
+
     # helper
     def _duration(self, attrCtx):
         value = int(attrCtx.duration().INT().getText())
