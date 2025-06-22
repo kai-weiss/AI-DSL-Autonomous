@@ -14,6 +14,7 @@ class Component:
 class Connection:
     src: str
     dst: str
+    latency_budget: timedelta | None = None
 
 
 @dataclass

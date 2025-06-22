@@ -12,7 +12,7 @@ def main(dsl_file: str):
     model = builder.model
     verifier = UppaalVerifier()
     props = list(model.properties.keys())
-    results = verifier.check(model, props)
+    results = verifier.check(model, props, xml_out="model.xml")
     for prop, res in results.items():
         print(f"{prop}: {res}")
 
