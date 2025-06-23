@@ -25,10 +25,10 @@ _RE_MS = re.compile(r"^\s*(?P<num>[0-9]+(?:\.[0-9]+)?)\s*ms\s*$", re.I)
 def _get_latency_budget(conn) -> Any | None:
     """Return the raw value of *latency_budget* if present, else ``None``."""
     for key in (
-        "latency_budget_ms",
-        "latency_budget",
-        "latencyBudgetMs",
-        "latencyBudget",
+            "latency_budget_ms",
+            "latency_budget",
+            "latencyBudgetMs",
+            "latencyBudget",
     ):
         if hasattr(conn, key):
             return getattr(conn, key)
@@ -51,7 +51,7 @@ def _to_ms(value: Any | None) -> int | None:
     if isinstance(value, int):
         return value
 
-    # float → assume *seconds*
+    # float → assume seconds
     if isinstance(value, float):
         return int(round(value * 1000))
 
@@ -59,13 +59,13 @@ def _to_ms(value: Any | None) -> int | None:
     if isinstance(value, _dt.timedelta):
         return int(round(value.total_seconds() * 1000))
 
-    # str with “ms”
+    # str with ms
     if isinstance(value, str):
         s = value.strip()
         m = _RE_MS.match(s)
         if m:
             return int(float(m["num"]))
-        # Maybe it is the default ``str(timedelta)`` → HH:MM:SS.ffffff
+        # Maybe it is the default str(timedelta) → HH:MM:SS.ffffff
         try:
             h, m_, sec = s.split(":")
             seconds = float(sec)
@@ -136,7 +136,12 @@ class UppaalVerifier:
 
             try:
                 proc = subprocess.run(
-                    [self.verifyta, bundle.nta_path, qfile],
+                    [self.verifyta,
+                     "-t", "0",  # ask for one counter-example
+                     "-y",  # print the symbolic states
+                     "-u",  # (optional) show a one-line summary at the end
+                     bundle.nta_path,
+                     qfile],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -144,9 +149,8 @@ class UppaalVerifier:
                 out_lower = proc.stdout.lower()
                 print(out_lower)
                 results[prop_name] = (
-                    "property is satisfied" in out_lower
-                    or "sonesatisfied" in out_lower  # older verifyta wording
-                    or "pass" in out_lower
+                        "formula is satisfied" in out_lower
+                        or "pass" in out_lower
                 )
             except FileNotFoundError:
                 # verifyta not installed or not on PATH
@@ -167,9 +171,9 @@ class UppaalVerifier:
         global_decl = ET.SubElement(nta, "declaration")
 
         # Broadcast channels for task lifecycle events
-        global_decl.text = "\n".join(
-            f"broadcast chan start_{c.name}, done_{c.name};" for c in model.components.values()
-        )
+        global_decl.text = "".join(
+            f"\n    broadcast chan start_{c.name}, done_{c.name};" for c in model.components.values()
+        ) + "\n  "
 
         sys_inst: List[str] = []  # collects <system> instantiations
         queries: Dict[str, str] = {}
@@ -224,11 +228,14 @@ class UppaalVerifier:
         # ------------------------------------------------------------------
         sys_block = ET.SubElement(nta, "system")
         proc_names = ", ".join(i.split(" = ")[0] for i in sys_inst)
-        sys_block.text = "\n".join(sys_inst + [f"system {proc_names};"])
+        sys_block.text = "\n    " + "\n    ".join(sys_inst + [f"system {proc_names};"]) + "\n  "
 
         # ------------------------------------------------------------------
         # Persist temporary NTA file
         # ------------------------------------------------------------------
+        tree = ET.ElementTree(nta)
+        ET.indent(tree, space="  ", level=0)
+
         with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as xf:
             xf.write(
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -251,38 +258,40 @@ class UppaalVerifier:
 
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = comp.name
-
         decl = ["clock x;"]
         if deadline is not None:
             decl.append("clock d;")
         ET.SubElement(tpl, "declaration").text = "\n".join(decl)
 
+        # Idle location
         idle = ET.SubElement(tpl, "location", id=f"{comp.name}_Idle")
         ET.SubElement(idle, "name").text = "Idle"
-        idle.set("invariant", f"x <= {period}")
+        ET.SubElement(idle, "label", kind="invariant").text = f"x <= {period}"
 
+        # Exec location
         exe = ET.SubElement(tpl, "location", id=f"{comp.name}_Exec")
         ET.SubElement(exe, "name").text = "Exec"
-        exe.set("invariant", f"x <= {wcet}")
+        ET.SubElement(exe, "label", kind="invariant").text = f"x <= {wcet}"
 
+        # (optional) Deadline-miss sink
+        bad = None
         if deadline is not None:
             bad = ET.SubElement(tpl, "location", id=f"{comp.name}_DeadlineMiss")
             ET.SubElement(bad, "name").text = "bad"
-        else:
-            bad = None
 
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        # Idle → Exec
+        # Idle ➜ Exec – must fire exactly at x==period
         t1 = ET.SubElement(tpl, "transition")
         ET.SubElement(t1, "source", ref=idle.get("id"))
         ET.SubElement(t1, "target", ref=exe.get("id"))
         ET.SubElement(t1, "label", kind="guard").text = f"x == {period}"
         ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}!"
-        assign = f"x = 0, d = {deadline}" if deadline is not None else "x = 0"
-        ET.SubElement(t1, "label", kind="assignment").text = assign
+        ET.SubElement(t1, "label", kind="assignment").text = (
+            f"x = 0{', d = ' + str(deadline) if deadline is not None else ''}"
+        )
 
-        # Exec → Idle
+        # Exec ➜ Idle – finishes exactly at WCET
         t2 = ET.SubElement(tpl, "transition")
         ET.SubElement(t2, "source", ref=exe.get("id"))
         ET.SubElement(t2, "target", ref=idle.get("id"))
@@ -290,7 +299,7 @@ class UppaalVerifier:
         ET.SubElement(t2, "label", kind="synchronisation").text = f"done_{comp.name}!"
         ET.SubElement(t2, "label", kind="assignment").text = "x = 0"
 
-        # Exec → DeadlineMiss
+        # Exec ➜ DeadlineMiss (optional)
         if bad is not None:
             t3 = ET.SubElement(tpl, "transition")
             ET.SubElement(t3, "source", ref=exe.get("id"))
@@ -348,12 +357,12 @@ class UppaalVerifier:
     # .....................................................................
 
     def _emit_e2e_observer(
-        self,
-        root: ET.Element,
-        src: str,
-        dst: str,
-        budget_ms: int,
-        prop_name: str,
+            self,
+            root: ET.Element,
+            src: str,
+            dst: str,
+            budget_ms: int,
+            prop_name: str,
     ) -> str:
         tpl_name = f"Obs_{prop_name}"
 
@@ -390,4 +399,3 @@ class UppaalVerifier:
         ET.SubElement(tr3, "label", kind="guard").text = f"t > {budget_ms}"
 
         return tpl_name
-
