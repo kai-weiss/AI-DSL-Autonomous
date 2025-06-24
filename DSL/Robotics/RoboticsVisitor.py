@@ -59,5 +59,100 @@ class RoboticsVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by RoboticsParser#optimisationBlock.
+    def visitOptimisationBlock(self, ctx:RoboticsParser.OptimisationBlockContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#variableDecl.
+    def visitVariableDecl(self, ctx:RoboticsParser.VariableDeclContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#componentRef.
+    def visitComponentRef(self, ctx:RoboticsParser.ComponentRefContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#connectionRefWrapped.
+    def visitConnectionRefWrapped(self, ctx:RoboticsParser.ConnectionRefWrappedContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#connectionRef.
+    def visitConnectionRef(self, ctx:RoboticsParser.ConnectionRefContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#attrName.
+    def visitAttrName(self, ctx:RoboticsParser.AttrNameContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#rangeSpec.
+    def visitRangeSpec(self, ctx:RoboticsParser.RangeSpecContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#objectiveDecl.
+    def visitObjectiveDecl(self, ctx:RoboticsParser.ObjectiveDeclContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#constraintDecl.
+    def visitConstraintDecl(self, ctx:RoboticsParser.ConstraintDeclContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#literalDuration.
+    def visitLiteralDuration(self, ctx:RoboticsParser.LiteralDurationContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#addSubExpr.
+    def visitAddSubExpr(self, ctx:RoboticsParser.AddSubExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#compExpr.
+    def visitCompExpr(self, ctx:RoboticsParser.CompExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#logicExpr.
+    def visitLogicExpr(self, ctx:RoboticsParser.LogicExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#atomExpr.
+    def visitAtomExpr(self, ctx:RoboticsParser.AtomExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#mulDivExpr.
+    def visitMulDivExpr(self, ctx:RoboticsParser.MulDivExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#intLit.
+    def visitIntLit(self, ctx:RoboticsParser.IntLitContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#durLit.
+    def visitDurLit(self, ctx:RoboticsParser.DurLitContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#varRef.
+    def visitVarRef(self, ctx:RoboticsParser.VarRefContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#parenExpr.
+    def visitParenExpr(self, ctx:RoboticsParser.ParenExprContext):
+        return self.visitChildren(ctx)
+
+
 
 del RoboticsParser

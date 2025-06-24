@@ -22,3 +22,10 @@ class Model:
     components: dict[str, Component] = field(default_factory=dict)
     connections: list[Connection] = field(default_factory=list)
     properties: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class OptimisationSpec:
+    variables:   list[str] = field(default_factory=list)
+    objectives:  list[str] = field(default_factory=list)
+    constraints: list[str] = field(default_factory=list)

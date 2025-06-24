@@ -1,6 +1,6 @@
 from DSL.Robotics.RoboticsParser import RoboticsParser
 from DSL.Robotics.RoboticsVisitor import RoboticsVisitor
-from DSL.metamodel import Model, Component, Connection
+from DSL.metamodel import Model, Component, Connection, OptimisationSpec
 from datetime import timedelta
 
 
@@ -42,6 +42,24 @@ class ASTBuilder(RoboticsVisitor):
         if text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
         self.model.properties[prop_id] = text
+        return None
+
+    # optimisationBlock : OPTIMISATION '{' VARIABLES '{' variableDecl+ '}'
+    def visitOptimisationBlock(self, ctx: RoboticsParser.OptimisationBlockContext):
+        spec = OptimisationSpec()
+        # VARIABLE declarations
+        for varCtx in ctx.variableDecl():
+            spec.variables.append(varCtx.getText())
+        # OBJECTIVE declarations
+        for objCtx in ctx.objectiveDecl():
+            spec.objectives.append(objCtx.getText())
+        # CONSTRAINT declarations
+        for conCtx in ctx.constraintDecl():
+            # strip leading 'assert ' and trailing ';'
+            text = conCtx.getText()
+            text = text[len('assert'):].rstrip(';')
+            spec.constraints.append(text.strip())
+        self.model.optimisation = spec
         return None
 
     # helper

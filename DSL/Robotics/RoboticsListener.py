@@ -98,5 +98,176 @@ class RoboticsListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by RoboticsParser#optimisationBlock.
+    def enterOptimisationBlock(self, ctx:RoboticsParser.OptimisationBlockContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#optimisationBlock.
+    def exitOptimisationBlock(self, ctx:RoboticsParser.OptimisationBlockContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#variableDecl.
+    def enterVariableDecl(self, ctx:RoboticsParser.VariableDeclContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#variableDecl.
+    def exitVariableDecl(self, ctx:RoboticsParser.VariableDeclContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#componentRef.
+    def enterComponentRef(self, ctx:RoboticsParser.ComponentRefContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#componentRef.
+    def exitComponentRef(self, ctx:RoboticsParser.ComponentRefContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#connectionRefWrapped.
+    def enterConnectionRefWrapped(self, ctx:RoboticsParser.ConnectionRefWrappedContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#connectionRefWrapped.
+    def exitConnectionRefWrapped(self, ctx:RoboticsParser.ConnectionRefWrappedContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#connectionRef.
+    def enterConnectionRef(self, ctx:RoboticsParser.ConnectionRefContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#connectionRef.
+    def exitConnectionRef(self, ctx:RoboticsParser.ConnectionRefContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#attrName.
+    def enterAttrName(self, ctx:RoboticsParser.AttrNameContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#attrName.
+    def exitAttrName(self, ctx:RoboticsParser.AttrNameContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#rangeSpec.
+    def enterRangeSpec(self, ctx:RoboticsParser.RangeSpecContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#rangeSpec.
+    def exitRangeSpec(self, ctx:RoboticsParser.RangeSpecContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#objectiveDecl.
+    def enterObjectiveDecl(self, ctx:RoboticsParser.ObjectiveDeclContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#objectiveDecl.
+    def exitObjectiveDecl(self, ctx:RoboticsParser.ObjectiveDeclContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#constraintDecl.
+    def enterConstraintDecl(self, ctx:RoboticsParser.ConstraintDeclContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#constraintDecl.
+    def exitConstraintDecl(self, ctx:RoboticsParser.ConstraintDeclContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#literalDuration.
+    def enterLiteralDuration(self, ctx:RoboticsParser.LiteralDurationContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#literalDuration.
+    def exitLiteralDuration(self, ctx:RoboticsParser.LiteralDurationContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#addSubExpr.
+    def enterAddSubExpr(self, ctx:RoboticsParser.AddSubExprContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#addSubExpr.
+    def exitAddSubExpr(self, ctx:RoboticsParser.AddSubExprContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#compExpr.
+    def enterCompExpr(self, ctx:RoboticsParser.CompExprContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#compExpr.
+    def exitCompExpr(self, ctx:RoboticsParser.CompExprContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#logicExpr.
+    def enterLogicExpr(self, ctx:RoboticsParser.LogicExprContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#logicExpr.
+    def exitLogicExpr(self, ctx:RoboticsParser.LogicExprContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#atomExpr.
+    def enterAtomExpr(self, ctx:RoboticsParser.AtomExprContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#atomExpr.
+    def exitAtomExpr(self, ctx:RoboticsParser.AtomExprContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#mulDivExpr.
+    def enterMulDivExpr(self, ctx:RoboticsParser.MulDivExprContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#mulDivExpr.
+    def exitMulDivExpr(self, ctx:RoboticsParser.MulDivExprContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#intLit.
+    def enterIntLit(self, ctx:RoboticsParser.IntLitContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#intLit.
+    def exitIntLit(self, ctx:RoboticsParser.IntLitContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#durLit.
+    def enterDurLit(self, ctx:RoboticsParser.DurLitContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#durLit.
+    def exitDurLit(self, ctx:RoboticsParser.DurLitContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#varRef.
+    def enterVarRef(self, ctx:RoboticsParser.VarRefContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#varRef.
+    def exitVarRef(self, ctx:RoboticsParser.VarRefContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#parenExpr.
+    def enterParenExpr(self, ctx:RoboticsParser.ParenExprContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#parenExpr.
+    def exitParenExpr(self, ctx:RoboticsParser.ParenExprContext):
+        pass
+
+
 
 del RoboticsParser

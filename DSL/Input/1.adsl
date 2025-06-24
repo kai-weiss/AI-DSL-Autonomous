@@ -13,4 +13,23 @@ COMPONENT PathPlanning {
 CONNECT CameraProcessing.output -> PathPlanning.input {
     latency_budget = 90ms;
 }
+
 PROPERTY EndToEndLatency: "CameraProcessing to PathPlanning response within 100 ms";
+
+OPTIMISATION {
+    VARIABLES {
+        CameraProcessing.period range 20ms .. 40ms;
+        PathPlanning.period     range 50ms .. 120ms;
+        (CameraProcessing.output -> PathPlanning.input).latency_budget
+                                range 2ms .. 10ms;
+    }
+    OBJECTIVES{
+        minimise worst_end2end_latency;
+        minimise max_core_utilisation;
+    }
+    CONSTRAINTS{
+        assert EndToEndLatency;          // re-use the PROPERTY
+        assert deadline_misses == 0;
+    }
+}
+
