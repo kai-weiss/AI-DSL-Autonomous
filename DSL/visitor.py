@@ -1,6 +1,6 @@
 from DSL.Robotics.RoboticsParser import RoboticsParser
 from DSL.Robotics.RoboticsVisitor import RoboticsVisitor
-from DSL.metamodel import Model, Component, Connection, OptimisationSpec
+from DSL.metamodel import Model, Component, Connection, OptimisationSpec, Variable
 from datetime import timedelta
 
 
@@ -49,7 +49,7 @@ class ASTBuilder(RoboticsVisitor):
         spec = OptimisationSpec()
         # VARIABLE declarations
         for varCtx in ctx.variableDecl():
-            spec.variables.append(varCtx.getText())
+            spec.variables.append(self._variable(varCtx))
         # OBJECTIVE declarations
         for objCtx in ctx.objectiveDecl():
             spec.objectives.append(objCtx.getText())
@@ -68,3 +68,28 @@ class ASTBuilder(RoboticsVisitor):
         unit = attrCtx.duration().UNIT_MS().getText()  # grammar allows only ms
 
         return timedelta(milliseconds=value)
+
+    def _variable(self, ctx: RoboticsParser.VariableDeclContext) -> Variable:
+        """Convert a variableDecl into a class Variable instance"""
+
+        # Resolve target reference
+        target = ctx.targetRef()
+        if isinstance(target, RoboticsParser.ComponentRefContext):
+            ref = target.ID().getText()
+        else:  # ConnectionRefWrapped
+            conn = target.connectionRef()
+            ids = [t.getText() for t in conn.ID()]
+            src_comp, src_port, dst_comp, dst_port = ids
+            ref = f"({src_comp}.{src_port}->{dst_comp}.{dst_port})"
+
+        attr = ctx.attrName().getText()
+
+        r = ctx.rangeSpec()
+        low = int(r.literalDuration(0).INT().getText())
+        high = int(r.literalDuration(1).INT().getText())
+
+        return Variable(
+            ref=f"{ref}.{attr}",
+            lower=timedelta(milliseconds=low),
+            upper=timedelta(milliseconds=high),
+        )
