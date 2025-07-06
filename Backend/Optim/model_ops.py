@@ -12,7 +12,7 @@ CONN_RE = re.compile(r"\((?P<src>\w+)\.(?P<src_port>\w+)->(?P<dst>\w+)\.(?P<dst_
 
 
 def apply_values(model: Model, assignments: Dict[str, timedelta]) -> Model:
-    """Return a new :class:`Model` with variable assignments applied"""
+    """Return a new model with variable assignments applied"""
     new_model = copy.deepcopy(model)
     for ref, value in assignments.items():
         m = CONN_RE.match(ref)

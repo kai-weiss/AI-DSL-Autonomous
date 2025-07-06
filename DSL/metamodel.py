@@ -39,4 +39,4 @@ class Model:
     components: dict[str, Component] = field(default_factory=dict)
     connections: list[Connection] = field(default_factory=list)
     properties: dict[str, str] = field(default_factory=dict)
-    optimisation: OptimisationSpec = field(default_factory=dict)
+    optimisation: list[OptimisationSpec] = field(default_factory=dict)

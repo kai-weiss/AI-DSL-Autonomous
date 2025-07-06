@@ -11,7 +11,7 @@ def main(dsl_file: str):
     builder.visit(tree)
     model = builder.model
     verifier = UppaalVerifier()
-    props = list(model.properties.keys())
+    props = getattr(model.optimisation, "constraints", [])
     results = verifier.check(model, props, xml_out="model.xml")
     for prop, res in results.items():
         print(f"{prop}: {res}")
