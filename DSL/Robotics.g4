@@ -3,11 +3,14 @@ grammar Robotics;
 /* ─────────────
  *  PARSER RULES
  * ───────────── */
-file           : statement* EOF ;               // entry-point
+file            : statement* EOF ;               // entry-point
 statement       : componentDecl
                 | connectDecl
                 | propertyDecl
                 | optimisationBlock
+                | systemDecl
+                | vehicleDecl
+                | cpuDecl
                 ;
 
 componentDecl   : COMPONENT ID LBRACE componentBody RBRACE ;
@@ -18,11 +21,28 @@ componentAttr   : PERIOD    EQUAL duration
                 | PRIORITY  EQUAL INT
                 ;
 
-connectDecl     : CONNECT src=endpoint ARROW dst=endpoint connectBody? ;
+connectDecl     : CONNECT (ID COLON)? src=endpoint ARROW dst=endpoint connectBody? ;
 connectBody     : LBRACE LATENCY_BUDGET EQUAL duration SEMI RBRACE ;
-endpoint        : comp=ID DOT port=ID ;                    // e.g. CameraProcessing.output
+endpoint        : comp=dottedId DOT port=ID ;                    // e.g. CameraProcessing.output
 
-propertyDecl    : PROPERTY ID COLON STRING SEMI ;
+propertyDecl    : PROPERTY ID COLON STRING SEMI                # propertyString
+                | PROPERTY ID LBRACE propertyField* RBRACE    # propertyBlock
+                ;
+
+vehicleDecl     : VEHICLE ID LBRACE componentDecl* RBRACE ;
+
+cpuDecl         : CPU LBRACE cpuAttr* RBRACE ;
+cpuAttr         : ID EQUAL (INT | ID) SEMI ;
+
+systemDecl      : SYSTEM ID LBRACE statement* RBRACE ;
+
+propertyField   : ID EQUAL propertyValue SEMI ;
+propertyValue   : duration
+                | dottedId
+                | ID
+                ;
+
+dottedId        : ID (DOT ID)* ;
 
 duration        : INT UNIT_MS ;
 
@@ -40,12 +60,12 @@ variableDecl
     ;
 
 targetRef
-    : ID                             # componentRef
+    : dottedId                          # componentRef
     | '(' connectionRef ')'             # connectionRefWrapped
     ;
 
 connectionRef
-    : ID '.' ID '->' ID '.' ID   // Cam.out -> Planner.in
+    : dottedId '.' ID '->' dottedId '.' ID   // Cam.out -> Planner.in
     ;
 
 attrName
@@ -100,6 +120,10 @@ DEADLINE        : 'deadline' ;
 WCET            : 'WCET' ;
 PRIORITY        : 'priority' ;
 LATENCY_BUDGET  : 'latency_budget' ;
+
+SYSTEM          : 'SYSTEM' ;
+VEHICLE         : 'VEHICLE' ;
+CPU             : 'CPU' ;
 
 ARROW           : '->' ;
 LBRACE          : '{' ;

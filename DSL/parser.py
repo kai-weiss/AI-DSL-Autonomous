@@ -20,7 +20,7 @@ def parse_source(text: str) -> ParseTree:
 
 
 if __name__ == "__main__":
-    dsl_path = Path(r"C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/1.adsl")
+    dsl_path = Path(r"C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl")
     source = dsl_path.read_text(encoding="utf-8")
     tree = parse_source(source)
     builder = ASTBuilder()

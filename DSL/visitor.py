@@ -25,23 +25,55 @@ class ASTBuilder(RoboticsVisitor):
         src_ctx = ctx.endpoint(0)
         dst_ctx = ctx.endpoint(1)
 
-        src_comp = src_ctx.comp.text  # label from the grammar
+        src_comp = src_ctx.dottedId().getText()  # label from the grammar
         src_port = src_ctx.port.text
-        dst_comp = dst_ctx.comp.text
+        dst_comp = dst_ctx.dottedId().getText()
         dst_port = dst_ctx.port.text
         self.model.connections.append(
             Connection(f"{src_comp}.{src_port}", f"{dst_comp}.{dst_port}")
         )
         return None
 
-    # propertyDecl : PROPERTY ID COLON STRING SEMI ;
-    def visitPropertyDecl(self, ctx: RoboticsParser.PropertyDeclContext):
+    # propertyDecl : PROPERTY ID COLON STRING SEMI ; (propertyString)
+    def visitPropertyString(self, ctx: RoboticsParser.PropertyStringContext):
         prop_id = ctx.ID().getText()
         text = ctx.STRING().getText()
         # strip surrounding quotes
         if text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
         self.model.properties[prop_id] = text
+        return None
+
+    # propertyDecl : PROPERTY ID LBRACE propertyField* RBRACE ; (propertyBlock)
+    def visitPropertyBlock(self, ctx: RoboticsParser.PropertyBlockContext):
+        prop_id = ctx.ID().getText()
+        parts = []
+        for f in ctx.propertyField():
+            key = f.ID().getText()
+            valCtx = f.propertyValue()
+            if valCtx.duration():
+                val = f"{valCtx.duration().INT().getText()}ms"
+            else:
+                val = valCtx.getText()
+            parts.append(f"{key}={val}")
+        self.model.properties[prop_id] = '; '.join(parts)
+        return None
+
+    # systemDecl : SYSTEM ID LBRACE statement* RBRACE ;
+    def visitSystemDecl(self, ctx: RoboticsParser.SystemDeclContext):
+        for elem in ctx.statement():
+            self.visit(elem)
+        return None
+
+    # vehicleDecl : VEHICLE ID LBRACE componentDecl* RBRACE ;
+    def visitVehicleDecl(self, ctx: RoboticsParser.VehicleDeclContext):
+        for comp in ctx.componentDecl():
+            self.visit(comp)
+        return None
+
+    # cpuDecl : CPU LBRACE cpuAttr* RBRACE ;
+    def visitCpuDecl(self, ctx: RoboticsParser.CpuDeclContext):
+        # CPU information is ignored for now
         return None
 
     # optimisationBlock : OPTIMISATION '{' VARIABLES '{' variableDecl+ '}'
@@ -75,11 +107,13 @@ class ASTBuilder(RoboticsVisitor):
         # Resolve target reference
         target = ctx.targetRef()
         if isinstance(target, RoboticsParser.ComponentRefContext):
-            ref = target.ID().getText()
+            ref = target.dottedId().getText()
         else:  # ConnectionRefWrapped
             conn = target.connectionRef()
-            ids = [t.getText() for t in conn.ID()]
-            src_comp, src_port, dst_comp, dst_port = ids
+            src_comp = conn.dottedId(0).getText()
+            src_port = conn.ID(0).getText()
+            dst_comp = conn.dottedId(1).getText()
+            dst_port = conn.ID(1).getText()
             ref = f"({src_comp}.{src_port}->{dst_comp}.{dst_port})"
 
         attr = ctx.attrName().getText()

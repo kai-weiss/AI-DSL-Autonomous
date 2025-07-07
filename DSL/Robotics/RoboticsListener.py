@@ -80,12 +80,84 @@ class RoboticsListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by RoboticsParser#propertyDecl.
-    def enterPropertyDecl(self, ctx:RoboticsParser.PropertyDeclContext):
+    # Enter a parse tree produced by RoboticsParser#propertyString.
+    def enterPropertyString(self, ctx:RoboticsParser.PropertyStringContext):
         pass
 
-    # Exit a parse tree produced by RoboticsParser#propertyDecl.
-    def exitPropertyDecl(self, ctx:RoboticsParser.PropertyDeclContext):
+    # Exit a parse tree produced by RoboticsParser#propertyString.
+    def exitPropertyString(self, ctx:RoboticsParser.PropertyStringContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#propertyBlock.
+    def enterPropertyBlock(self, ctx:RoboticsParser.PropertyBlockContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#propertyBlock.
+    def exitPropertyBlock(self, ctx:RoboticsParser.PropertyBlockContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#vehicleDecl.
+    def enterVehicleDecl(self, ctx:RoboticsParser.VehicleDeclContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#vehicleDecl.
+    def exitVehicleDecl(self, ctx:RoboticsParser.VehicleDeclContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#cpuDecl.
+    def enterCpuDecl(self, ctx:RoboticsParser.CpuDeclContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#cpuDecl.
+    def exitCpuDecl(self, ctx:RoboticsParser.CpuDeclContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#cpuAttr.
+    def enterCpuAttr(self, ctx:RoboticsParser.CpuAttrContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#cpuAttr.
+    def exitCpuAttr(self, ctx:RoboticsParser.CpuAttrContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#systemDecl.
+    def enterSystemDecl(self, ctx:RoboticsParser.SystemDeclContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#systemDecl.
+    def exitSystemDecl(self, ctx:RoboticsParser.SystemDeclContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#propertyField.
+    def enterPropertyField(self, ctx:RoboticsParser.PropertyFieldContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#propertyField.
+    def exitPropertyField(self, ctx:RoboticsParser.PropertyFieldContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#propertyValue.
+    def enterPropertyValue(self, ctx:RoboticsParser.PropertyValueContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#propertyValue.
+    def exitPropertyValue(self, ctx:RoboticsParser.PropertyValueContext):
+        pass
+
+
+    # Enter a parse tree produced by RoboticsParser#dottedId.
+    def enterDottedId(self, ctx:RoboticsParser.DottedIdContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#dottedId.
+    def exitDottedId(self, ctx:RoboticsParser.DottedIdContext):
         pass
 
 

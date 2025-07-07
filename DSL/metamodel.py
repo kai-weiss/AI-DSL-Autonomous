@@ -16,6 +16,7 @@ class Connection:
     dst: str
     latency_budget: timedelta | None = None
 
+
 @dataclass
 class Variable:
     """A tunable variable from an Optimisation block"""

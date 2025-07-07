@@ -49,8 +49,48 @@ class RoboticsVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by RoboticsParser#propertyDecl.
-    def visitPropertyDecl(self, ctx:RoboticsParser.PropertyDeclContext):
+    # Visit a parse tree produced by RoboticsParser#propertyString.
+    def visitPropertyString(self, ctx:RoboticsParser.PropertyStringContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#propertyBlock.
+    def visitPropertyBlock(self, ctx:RoboticsParser.PropertyBlockContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#vehicleDecl.
+    def visitVehicleDecl(self, ctx:RoboticsParser.VehicleDeclContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#cpuDecl.
+    def visitCpuDecl(self, ctx:RoboticsParser.CpuDeclContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#cpuAttr.
+    def visitCpuAttr(self, ctx:RoboticsParser.CpuAttrContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#systemDecl.
+    def visitSystemDecl(self, ctx:RoboticsParser.SystemDeclContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#propertyField.
+    def visitPropertyField(self, ctx:RoboticsParser.PropertyFieldContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#propertyValue.
+    def visitPropertyValue(self, ctx:RoboticsParser.PropertyValueContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by RoboticsParser#dottedId.
+    def visitDottedId(self, ctx:RoboticsParser.DottedIdContext):
         return self.visitChildren(ctx)
 
 
