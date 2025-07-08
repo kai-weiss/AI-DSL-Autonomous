@@ -23,7 +23,7 @@ _RE_MS = re.compile(r"^\s*(?P<num>[0-9]+(?:\.[0-9]+)?)\s*ms\s*$", re.I)
 
 
 def _get_latency_budget(conn) -> Any | None:
-    """Return the raw value of *latency_budget* if present, else ``None``."""
+    """Return the raw value of *latency_budget* if present, else None"""
     for key in (
             "latency_budget_ms",
             "latency_budget",
@@ -80,7 +80,7 @@ def _to_ms(value: Any | None) -> int | None:
 # ---------------------------------------------------------------------------
 
 class QueryBundle:
-    """Holds the path to the generated NTA and the query map for a run."""
+    """Holds the path to the generated NTA and the query map for a run"""
 
     def __init__(self, nta_path: str, queries: Dict[str, str]):
         self.nta_path = nta_path
@@ -88,13 +88,17 @@ class QueryBundle:
 
 
 class UppaalVerifier:
-    """Translate a DSL model into UPPAAL, then call *verifyta* per property."""
+    """Translate a DSL model into UPPAAL XML format, then call verifyta per property"""
 
     #: natural‑language pattern recognised by _emit_e2e_observer
     RESPONSE_RE = re.compile(
         r"^(?P<src>\w+)\s+to\s+(?P<dst>\w+)\s+response\s+within\s+(?P<val>\d+)\s*ms$",
         re.IGNORECASE,
     )
+
+    def _strip_qual(self, name: str) -> str:
+        """Return the last component of a dotted identifier"""
+        return name.split(".")[-1]
 
     def __init__(self, verifyta: str = "verifyta"):
         self.verifyta = verifyta
@@ -104,12 +108,12 @@ class UppaalVerifier:
     # .....................................................................
 
     def check(self, model: Model, props: List[str], xml_out: str = None) -> Dict[str, bool | None]:
-        """Generate an NTA + queries and run them through *verifyta*.
+        """Generate an NTA + queries and run them through verifyta
 
-        Returns a mapping *property‑name → bool | None* where:
-        * ``True``  – property satisfied
-        * ``False`` – property violated (counter‑example exists)
-        * ``None``  – verifyta unavailable *or* PROPERTY not recognised
+        Returns a mapping where:
+        * True: property satisfied
+        * False: property violated (counter-example exists)
+        * None: verifyta unavailable or PROPERTY not recognised
         """
 
         bundle = self._build_model(model)
@@ -126,9 +130,13 @@ class UppaalVerifier:
         for prop_name in props:
             query = bundle.queries.get(prop_name)
             if query is None:
-                # The PROPERTY either does not exist or is not recognised
-                results[prop_name] = None
-                continue
+                raw = prop_name.strip()
+                if raw.startswith("A") or raw.startswith("E"):
+                    print("here")
+                    print(raw)
+                    query = raw
+                else:
+                    query = f"A[] {raw}"
 
             with tempfile.NamedTemporaryFile("w", suffix=".q", delete=False) as qf:
                 qf.write(query)
@@ -164,8 +172,8 @@ class UppaalVerifier:
     # Internal helpers – model generation
     # .....................................................................
 
-    def _build_model(self, model: Model) -> QueryBundle:  # noqa: C901 – long but clear
-        """Serialise *model* to flat‑1_5 XML and return *(nta‑path, queries)*."""
+    def _build_model(self, model: Model) -> QueryBundle:
+        """Serialise model to XML"""
 
         nta = ET.Element("nta")
         global_decl = ET.SubElement(nta, "declaration")
@@ -175,7 +183,7 @@ class UppaalVerifier:
             f"\n    broadcast chan start_{c.name}, done_{c.name};" for c in model.components.values()
         ) + "\n  "
 
-        sys_inst: List[str] = []  # collects <system> instantiations
+        sys_inst: List[str] = []  # collects system instantiations
         queries: Dict[str, str] = {}
 
         # ------------------------------------------------------------------
@@ -218,13 +226,34 @@ class UppaalVerifier:
             m = self.RESPONSE_RE.match(text)
             if m:
                 src, dst, budget = m["src"], m["dst"], int(m["val"])
-                tpl = self._emit_e2e_observer(nta, src, dst, budget, prop_name)
+                tpl = self._emit_e2e_observer(
+                    nta, self._strip_qual(src), self._strip_qual(dst), budget, prop_name
+                )
                 inst = f"I_{tpl}"
                 sys_inst.append(f"{inst} = {tpl}();")
                 queries[prop_name] = f"A[] not {inst}.bad"
+                continue
+
+            if "=" in text:
+                fields = {}
+                for part in text.split(";"):
+                    part = part.strip()
+                    if not part or "=" not in part:
+                        continue
+                    k, v = part.split("=", 1)
+                    fields[k.strip()] = v.strip()
+                if fields.get("pattern") == "BOUNDED_RESPONSE":
+                    src = self._strip_qual(fields.get("stimulus", ""))
+                    dst = self._strip_qual(fields.get("response", ""))
+                    bound = _to_ms(fields.get("bound"))
+                    if src and dst and bound is not None:
+                        tpl = self._emit_e2e_observer(nta, src, dst, bound, prop_name)
+                        inst = f"I_{tpl}"
+                        sys_inst.append(f"{inst} = {tpl}();")
+                        queries[prop_name] = f"A[] not {inst}.bad"
 
         # ------------------------------------------------------------------
-        # <system> block
+        # system block
         # ------------------------------------------------------------------
         sys_block = ET.SubElement(nta, "system")
         proc_names = ", ".join(i.split(" = ")[0] for i in sys_inst)
@@ -252,9 +281,13 @@ class UppaalVerifier:
     # ------------------------------------------------------------------
 
     def _emit_component_template(self, root: ET.Element, comp: Component) -> None:
-        period = _to_ms(getattr(comp, "period_ms", None) or getattr(comp, "period", None))
-        wcet = _to_ms(getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None))
+        period = _to_ms(getattr(comp, "period_ms", None) or getattr(comp, "period", None) or 0)
+        print(period)
+        wcet = _to_ms(getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None) or 0)
         deadline = _to_ms(getattr(comp, "deadline_ms", None) or getattr(comp, "deadline", None))
+        # fall back to WCET if no explicit deadline is provided
+        if deadline is None:
+            deadline = wcet
 
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = comp.name
@@ -313,8 +346,8 @@ class UppaalVerifier:
     def _emit_connection_observer(self, root: ET.Element, conn: Connection) -> str:
         budget = conn.__dict__["__latency_ms"]
 
-        src_comp = conn.src.split(".", 1)[0]
-        dst_comp = conn.dst.split(".", 1)[0]
+        src_comp = self._strip_qual(conn.src.split(".")[-2])
+        dst_comp = self._strip_qual(conn.dst.split(".")[-2])
 
         tpl_name = f"Obs_{src_comp}_{dst_comp}"
 

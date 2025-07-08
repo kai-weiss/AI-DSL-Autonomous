@@ -18,5 +18,5 @@ def main(dsl_file: str):
 
 
 if __name__ == "__main__":
-    file = r"C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/1.adsl"
+    file = r"C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl"
     main(file)

@@ -2,70 +2,324 @@
 <!DOCTYPE nta PUBLIC "-//Uppaal Team//DTD Flat System 1.5//EN" "http://www.it.uu.se/research/group/darts/uppaal/flat-1_5.dtd">
 <nta>
   <declaration>
-    broadcast chan start_CameraProcessing, done_CameraProcessing;
-    broadcast chan start_PathPlanning, done_PathPlanning;
+    broadcast chan start_Perception_A, done_Perception_A;
+    broadcast chan start_AckHandler_A, done_AckHandler_A;
+    broadcast chan start_Perception_B, done_Perception_B;
+    broadcast chan start_PermissionReqTx_B, done_PermissionReqTx_B;
+    broadcast chan start_PermissionAckRx_B, done_PermissionAckRx_B;
+    broadcast chan start_TrajectoryPlanner_B, done_TrajectoryPlanner_B;
+    broadcast chan start_Controller_B, done_Controller_B;
   </declaration>
   <template>
-    <name>CameraProcessing</name>
-    <declaration>clock x;</declaration>
-    <location id="CameraProcessing_Idle">
+    <name>Perception_A</name>
+    <declaration>clock x;
+clock d;</declaration>
+    <location id="Perception_A_Idle">
       <name>Idle</name>
-      <label kind="invariant">x &lt;= 33</label>
+      <label kind="invariant">x &lt;= 40</label>
     </location>
-    <location id="CameraProcessing_Exec">
+    <location id="Perception_A_Exec">
       <name>Exec</name>
-      <label kind="invariant">x &lt;= 20</label>
+      <label kind="invariant">x &lt;= 10</label>
     </location>
-    <init ref="CameraProcessing_Idle" />
+    <location id="Perception_A_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="Perception_A_Idle" />
     <transition>
-      <source ref="CameraProcessing_Idle" />
-      <target ref="CameraProcessing_Exec" />
-      <label kind="guard">x == 33</label>
-      <label kind="synchronisation">start_CameraProcessing!</label>
+      <source ref="Perception_A_Idle" />
+      <target ref="Perception_A_Exec" />
+      <label kind="guard">x == 40</label>
+      <label kind="synchronisation">start_Perception_A!</label>
+      <label kind="assignment">x = 0, d = 40</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Exec" />
+      <target ref="Perception_A_Idle" />
+      <label kind="guard">x == 10</label>
+      <label kind="synchronisation">done_Perception_A!</label>
       <label kind="assignment">x = 0</label>
     </transition>
     <transition>
-      <source ref="CameraProcessing_Exec" />
-      <target ref="CameraProcessing_Idle" />
-      <label kind="guard">x == 20</label>
-      <label kind="synchronisation">done_CameraProcessing!</label>
-      <label kind="assignment">x = 0</label>
+      <source ref="Perception_A_Exec" />
+      <target ref="Perception_A_DeadlineMiss" />
+      <label kind="guard">x &gt; 40</label>
     </transition>
   </template>
   <template>
-    <name>PathPlanning</name>
+    <name>AckHandler_A</name>
     <declaration>clock x;
 clock d;</declaration>
-    <location id="PathPlanning_Idle">
+    <location id="AckHandler_A_Idle">
       <name>Idle</name>
-      <label kind="invariant">x &lt;= 60</label>
+      <label kind="invariant">x &lt;= 0</label>
     </location>
-    <location id="PathPlanning_Exec">
+    <location id="AckHandler_A_Exec">
       <name>Exec</name>
-      <label kind="invariant">x &lt;= 30</label>
+      <label kind="invariant">x &lt;= 2</label>
     </location>
-    <location id="PathPlanning_DeadlineMiss">
+    <location id="AckHandler_A_DeadlineMiss">
       <name>bad</name>
     </location>
-    <init ref="PathPlanning_Idle" />
+    <init ref="AckHandler_A_Idle" />
     <transition>
-      <source ref="PathPlanning_Idle" />
-      <target ref="PathPlanning_Exec" />
-      <label kind="guard">x == 60</label>
-      <label kind="synchronisation">start_PathPlanning!</label>
-      <label kind="assignment">x = 0, d = 90</label>
+      <source ref="AckHandler_A_Idle" />
+      <target ref="AckHandler_A_Exec" />
+      <label kind="guard">x == 0</label>
+      <label kind="synchronisation">start_AckHandler_A!</label>
+      <label kind="assignment">x = 0, d = 2</label>
     </transition>
     <transition>
-      <source ref="PathPlanning_Exec" />
-      <target ref="PathPlanning_Idle" />
-      <label kind="guard">x == 30</label>
-      <label kind="synchronisation">done_PathPlanning!</label>
+      <source ref="AckHandler_A_Exec" />
+      <target ref="AckHandler_A_Idle" />
+      <label kind="guard">x == 2</label>
+      <label kind="synchronisation">done_AckHandler_A!</label>
       <label kind="assignment">x = 0</label>
     </transition>
     <transition>
-      <source ref="PathPlanning_Exec" />
-      <target ref="PathPlanning_DeadlineMiss" />
-      <label kind="guard">x &gt; 90</label>
+      <source ref="AckHandler_A_Exec" />
+      <target ref="AckHandler_A_DeadlineMiss" />
+      <label kind="guard">x &gt; 2</label>
+    </transition>
+  </template>
+  <template>
+    <name>Perception_B</name>
+    <declaration>clock x;
+clock d;</declaration>
+    <location id="Perception_B_Idle">
+      <name>Idle</name>
+      <label kind="invariant">x &lt;= 40</label>
+    </location>
+    <location id="Perception_B_Exec">
+      <name>Exec</name>
+      <label kind="invariant">x &lt;= 10</label>
+    </location>
+    <location id="Perception_B_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="Perception_B_Idle" />
+    <transition>
+      <source ref="Perception_B_Idle" />
+      <target ref="Perception_B_Exec" />
+      <label kind="guard">x == 40</label>
+      <label kind="synchronisation">start_Perception_B!</label>
+      <label kind="assignment">x = 0, d = 40</label>
+    </transition>
+    <transition>
+      <source ref="Perception_B_Exec" />
+      <target ref="Perception_B_Idle" />
+      <label kind="guard">x == 10</label>
+      <label kind="synchronisation">done_Perception_B!</label>
+      <label kind="assignment">x = 0</label>
+    </transition>
+    <transition>
+      <source ref="Perception_B_Exec" />
+      <target ref="Perception_B_DeadlineMiss" />
+      <label kind="guard">x &gt; 40</label>
+    </transition>
+  </template>
+  <template>
+    <name>PermissionReqTx_B</name>
+    <declaration>clock x;
+clock d;</declaration>
+    <location id="PermissionReqTx_B_Idle">
+      <name>Idle</name>
+      <label kind="invariant">x &lt;= 0</label>
+    </location>
+    <location id="PermissionReqTx_B_Exec">
+      <name>Exec</name>
+      <label kind="invariant">x &lt;= 2</label>
+    </location>
+    <location id="PermissionReqTx_B_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="PermissionReqTx_B_Idle" />
+    <transition>
+      <source ref="PermissionReqTx_B_Idle" />
+      <target ref="PermissionReqTx_B_Exec" />
+      <label kind="guard">x == 0</label>
+      <label kind="synchronisation">start_PermissionReqTx_B!</label>
+      <label kind="assignment">x = 0, d = 2</label>
+    </transition>
+    <transition>
+      <source ref="PermissionReqTx_B_Exec" />
+      <target ref="PermissionReqTx_B_Idle" />
+      <label kind="guard">x == 2</label>
+      <label kind="synchronisation">done_PermissionReqTx_B!</label>
+      <label kind="assignment">x = 0</label>
+    </transition>
+    <transition>
+      <source ref="PermissionReqTx_B_Exec" />
+      <target ref="PermissionReqTx_B_DeadlineMiss" />
+      <label kind="guard">x &gt; 2</label>
+    </transition>
+  </template>
+  <template>
+    <name>PermissionAckRx_B</name>
+    <declaration>clock x;
+clock d;</declaration>
+    <location id="PermissionAckRx_B_Idle">
+      <name>Idle</name>
+      <label kind="invariant">x &lt;= 0</label>
+    </location>
+    <location id="PermissionAckRx_B_Exec">
+      <name>Exec</name>
+      <label kind="invariant">x &lt;= 2</label>
+    </location>
+    <location id="PermissionAckRx_B_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="PermissionAckRx_B_Idle" />
+    <transition>
+      <source ref="PermissionAckRx_B_Idle" />
+      <target ref="PermissionAckRx_B_Exec" />
+      <label kind="guard">x == 0</label>
+      <label kind="synchronisation">start_PermissionAckRx_B!</label>
+      <label kind="assignment">x = 0, d = 2</label>
+    </transition>
+    <transition>
+      <source ref="PermissionAckRx_B_Exec" />
+      <target ref="PermissionAckRx_B_Idle" />
+      <label kind="guard">x == 2</label>
+      <label kind="synchronisation">done_PermissionAckRx_B!</label>
+      <label kind="assignment">x = 0</label>
+    </transition>
+    <transition>
+      <source ref="PermissionAckRx_B_Exec" />
+      <target ref="PermissionAckRx_B_DeadlineMiss" />
+      <label kind="guard">x &gt; 2</label>
+    </transition>
+  </template>
+  <template>
+    <name>TrajectoryPlanner_B</name>
+    <declaration>clock x;
+clock d;</declaration>
+    <location id="TrajectoryPlanner_B_Idle">
+      <name>Idle</name>
+      <label kind="invariant">x &lt;= 20</label>
+    </location>
+    <location id="TrajectoryPlanner_B_Exec">
+      <name>Exec</name>
+      <label kind="invariant">x &lt;= 20</label>
+    </location>
+    <location id="TrajectoryPlanner_B_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="TrajectoryPlanner_B_Idle" />
+    <transition>
+      <source ref="TrajectoryPlanner_B_Idle" />
+      <target ref="TrajectoryPlanner_B_Exec" />
+      <label kind="guard">x == 20</label>
+      <label kind="synchronisation">start_TrajectoryPlanner_B!</label>
+      <label kind="assignment">x = 0, d = 50</label>
+    </transition>
+    <transition>
+      <source ref="TrajectoryPlanner_B_Exec" />
+      <target ref="TrajectoryPlanner_B_Idle" />
+      <label kind="guard">x == 20</label>
+      <label kind="synchronisation">done_TrajectoryPlanner_B!</label>
+      <label kind="assignment">x = 0</label>
+    </transition>
+    <transition>
+      <source ref="TrajectoryPlanner_B_Exec" />
+      <target ref="TrajectoryPlanner_B_DeadlineMiss" />
+      <label kind="guard">x &gt; 50</label>
+    </transition>
+  </template>
+  <template>
+    <name>Controller_B</name>
+    <declaration>clock x;
+clock d;</declaration>
+    <location id="Controller_B_Idle">
+      <name>Idle</name>
+      <label kind="invariant">x &lt;= 0</label>
+    </location>
+    <location id="Controller_B_Exec">
+      <name>Exec</name>
+      <label kind="invariant">x &lt;= 5</label>
+    </location>
+    <location id="Controller_B_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="Controller_B_Idle" />
+    <transition>
+      <source ref="Controller_B_Idle" />
+      <target ref="Controller_B_Exec" />
+      <label kind="guard">x == 0</label>
+      <label kind="synchronisation">start_Controller_B!</label>
+      <label kind="assignment">x = 0, d = 5</label>
+    </transition>
+    <transition>
+      <source ref="Controller_B_Exec" />
+      <target ref="Controller_B_Idle" />
+      <label kind="guard">x == 5</label>
+      <label kind="synchronisation">done_Controller_B!</label>
+      <label kind="assignment">x = 0</label>
+    </transition>
+    <transition>
+      <source ref="Controller_B_Exec" />
+      <target ref="Controller_B_DeadlineMiss" />
+      <label kind="guard">x &gt; 5</label>
+    </transition>
+  </template>
+  <template>
+    <name>Obs_PermissionReqTx_B_AckHandler_A</name>
+    <declaration>clock t;</declaration>
+    <location id="Obs_PermissionReqTx_B_AckHandler_A_Idle">
+      <name>Idle</name>
+    </location>
+    <location id="Obs_PermissionReqTx_B_AckHandler_A_Wait" invariant="t &lt;= 8">
+      <name>Wait</name>
+    </location>
+    <location id="Obs_PermissionReqTx_B_AckHandler_A_Bad">
+      <name>bad</name>
+    </location>
+    <init ref="Obs_PermissionReqTx_B_AckHandler_A_Idle" />
+    <transition>
+      <source ref="Obs_PermissionReqTx_B_AckHandler_A_Idle" />
+      <target ref="Obs_PermissionReqTx_B_AckHandler_A_Wait" />
+      <label kind="synchronisation">done_PermissionReqTx_B?</label>
+      <label kind="assignment">t = 0</label>
+    </transition>
+    <transition>
+      <source ref="Obs_PermissionReqTx_B_AckHandler_A_Wait" />
+      <target ref="Obs_PermissionReqTx_B_AckHandler_A_Idle" />
+      <label kind="synchronisation">start_AckHandler_A?</label>
+    </transition>
+    <transition>
+      <source ref="Obs_PermissionReqTx_B_AckHandler_A_Wait" />
+      <target ref="Obs_PermissionReqTx_B_AckHandler_A_Bad" />
+      <label kind="guard">t &gt; 8</label>
+    </transition>
+  </template>
+  <template>
+    <name>Obs_AckHandler_A_PermissionAckRx_B</name>
+    <declaration>clock t;</declaration>
+    <location id="Obs_AckHandler_A_PermissionAckRx_B_Idle">
+      <name>Idle</name>
+    </location>
+    <location id="Obs_AckHandler_A_PermissionAckRx_B_Wait" invariant="t &lt;= 8">
+      <name>Wait</name>
+    </location>
+    <location id="Obs_AckHandler_A_PermissionAckRx_B_Bad">
+      <name>bad</name>
+    </location>
+    <init ref="Obs_AckHandler_A_PermissionAckRx_B_Idle" />
+    <transition>
+      <source ref="Obs_AckHandler_A_PermissionAckRx_B_Idle" />
+      <target ref="Obs_AckHandler_A_PermissionAckRx_B_Wait" />
+      <label kind="synchronisation">done_AckHandler_A?</label>
+      <label kind="assignment">t = 0</label>
+    </transition>
+    <transition>
+      <source ref="Obs_AckHandler_A_PermissionAckRx_B_Wait" />
+      <target ref="Obs_AckHandler_A_PermissionAckRx_B_Idle" />
+      <label kind="synchronisation">start_PermissionAckRx_B?</label>
+    </transition>
+    <transition>
+      <source ref="Obs_AckHandler_A_PermissionAckRx_B_Wait" />
+      <target ref="Obs_AckHandler_A_PermissionAckRx_B_Bad" />
+      <label kind="guard">t &gt; 8</label>
     </transition>
   </template>
   <template>
@@ -74,7 +328,7 @@ clock d;</declaration>
     <location id="Obs_EndToEndLatency_Idle">
       <name>Idle</name>
     </location>
-    <location id="Obs_EndToEndLatency_Wait" invariant="t &lt;= 100">
+    <location id="Obs_EndToEndLatency_Wait" invariant="t &lt;= 4">
       <name>Wait</name>
     </location>
     <location id="Obs_EndToEndLatency_Bad">
@@ -84,24 +338,31 @@ clock d;</declaration>
     <transition>
       <source ref="Obs_EndToEndLatency_Idle" />
       <target ref="Obs_EndToEndLatency_Wait" />
-      <label kind="synchronisation">done_CameraProcessing?</label>
+      <label kind="synchronisation">done_PermissionReqTx_B?</label>
       <label kind="assignment">t = 0</label>
     </transition>
     <transition>
       <source ref="Obs_EndToEndLatency_Wait" />
       <target ref="Obs_EndToEndLatency_Idle" />
-      <label kind="synchronisation">done_PathPlanning?</label>
+      <label kind="synchronisation">done_Controller_B?</label>
     </transition>
     <transition>
       <source ref="Obs_EndToEndLatency_Wait" />
       <target ref="Obs_EndToEndLatency_Bad" />
-      <label kind="guard">t &gt; 100</label>
+      <label kind="guard">t &gt; 4</label>
     </transition>
   </template>
   <system>
-    P_CameraProcessing = CameraProcessing();
-    P_PathPlanning = PathPlanning();
+    P_Perception_A = Perception_A();
+    P_AckHandler_A = AckHandler_A();
+    P_Perception_B = Perception_B();
+    P_PermissionReqTx_B = PermissionReqTx_B();
+    P_PermissionAckRx_B = PermissionAckRx_B();
+    P_TrajectoryPlanner_B = TrajectoryPlanner_B();
+    P_Controller_B = Controller_B();
+    I_Obs_PermissionReqTx_B_AckHandler_A = Obs_PermissionReqTx_B_AckHandler_A();
+    I_Obs_AckHandler_A_PermissionAckRx_B = Obs_AckHandler_A_PermissionAckRx_B();
     I_Obs_EndToEndLatency = Obs_EndToEndLatency();
-    system P_CameraProcessing, P_PathPlanning, I_Obs_EndToEndLatency;
+    system P_Perception_A, P_AckHandler_A, P_Perception_B, P_PermissionReqTx_B, P_PermissionAckRx_B, P_TrajectoryPlanner_B, P_Controller_B, I_Obs_PermissionReqTx_B_AckHandler_A, I_Obs_AckHandler_A_PermissionAckRx_B, I_Obs_EndToEndLatency;
   </system>
 </nta>

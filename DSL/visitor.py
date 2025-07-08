@@ -29,8 +29,18 @@ class ASTBuilder(RoboticsVisitor):
         src_port = src_ctx.port.text
         dst_comp = dst_ctx.dottedId().getText()
         dst_port = dst_ctx.port.text
+        budget = None
+        if ctx.connectBody():
+            dur = ctx.connectBody().duration()
+            ms = int(dur.INT().getText())
+            budget = timedelta(milliseconds=ms)
+
         self.model.connections.append(
-            Connection(f"{src_comp}.{src_port}", f"{dst_comp}.{dst_port}")
+            Connection(
+                f"{src_comp}.{src_port}",
+                f"{dst_comp}.{dst_port}",
+                budget,
+            )
         )
         return None
 
