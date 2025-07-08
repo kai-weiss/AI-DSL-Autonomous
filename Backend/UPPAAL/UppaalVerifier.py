@@ -111,9 +111,9 @@ class UppaalVerifier:
         """Generate an NTA + queries and run them through verifyta
 
         Returns a mapping where:
-        * True: property satisfied
-        * False: property violated (counter-example exists)
-        * None: verifyta unavailable or PROPERTY not recognised
+        - True: property satisfied
+        - False: property violated (counter-example exists)
+        - None: verifyta unavailable or PROPERTY not recognised
         """
 
         bundle = self._build_model(model)
@@ -128,12 +128,12 @@ class UppaalVerifier:
         results: Dict[str, bool | None] = {}
 
         for prop_name in props:
+            # print(prop_name)
             query = bundle.queries.get(prop_name)
+            # print(query)
             if query is None:
                 raw = prop_name.strip()
                 if raw.startswith("A") or raw.startswith("E"):
-                    print("here")
-                    print(raw)
                     query = raw
                 else:
                     query = f"A[] {raw}"
@@ -169,7 +169,7 @@ class UppaalVerifier:
         return results
 
     # .....................................................................
-    # Internal helpers – model generation
+    # Internal helpers – model generation
     # .....................................................................
 
     def _build_model(self, model: Model) -> QueryBundle:
@@ -189,9 +189,19 @@ class UppaalVerifier:
         # ------------------------------------------------------------------
         # Component templates
         # ------------------------------------------------------------------
+        deadline_comps: List[str] = []
         for comp in model.components.values():
             self._emit_component_template(nta, comp)
             sys_inst.append(f"P_{comp.name} = {comp.name}();")
+            if getattr(comp, "deadline", None) is not None:
+                deadline_comps.append(comp.name)
+
+        # Determine which components have incoming connections
+        incoming: Dict[str, bool] = {c.name: False for c in model.components.values()}
+        for conn in getattr(model, "connections", []):  # type: ignore[attr-defined]
+            dst = conn.dst.split(".")[-2]
+            dst = self._strip_qual(dst)
+            incoming[dst] = True
 
         # ------------------------------------------------------------------
         # Connection‑latency observers
@@ -210,6 +220,16 @@ class UppaalVerifier:
             prop_name = f"ConnLat_{src_comp}_{dst_comp}"
             queries[prop_name] = f"A[] not {inst}.bad"
             model.properties[prop_name] = queries[prop_name]  # expose synthetic
+
+        # ------------------------------------------------------------------
+        # Environment triggers for components without inputs
+        # ------------------------------------------------------------------
+        for comp in model.components.values():
+            period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
+            if period_val is None and not incoming.get(comp.name):
+                tpl = self._emit_env_trigger(nta, comp.name)
+                inst = f"I_{tpl}"
+                sys_inst.append(f"{inst} = {tpl}();")
 
         # ------------------------------------------------------------------
         # DSL PROPERTY clauses
@@ -252,6 +272,15 @@ class UppaalVerifier:
                         sys_inst.append(f"{inst} = {tpl}();")
                         queries[prop_name] = f"A[] not {inst}.bad"
 
+        if "deadline_misses==0" not in queries and deadline_comps:
+            locs = [f"P_{n}.bad" for n in deadline_comps]
+            if len(locs) == 1:
+                expr = locs[0]
+            else:
+                expr = "(" + " || ".join(locs) + ")"
+            queries["deadline_misses==0"] = f"A[] not {expr}"
+            model.properties["deadline_misses==0"] = queries["deadline_misses==0"]
+
         # ------------------------------------------------------------------
         # system block
         # ------------------------------------------------------------------
@@ -281,13 +310,15 @@ class UppaalVerifier:
     # ------------------------------------------------------------------
 
     def _emit_component_template(self, root: ET.Element, comp: Component) -> None:
-        period = _to_ms(getattr(comp, "period_ms", None) or getattr(comp, "period", None) or 0)
-        print(period)
+        period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
+        period = _to_ms(period_val or 0)
         wcet = _to_ms(getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None) or 0)
         deadline = _to_ms(getattr(comp, "deadline_ms", None) or getattr(comp, "deadline", None))
         # fall back to WCET if no explicit deadline is provided
         if deadline is None:
             deadline = wcet
+
+        is_event_driven = period_val is None
 
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = comp.name
@@ -299,7 +330,8 @@ class UppaalVerifier:
         # Idle location
         idle = ET.SubElement(tpl, "location", id=f"{comp.name}_Idle")
         ET.SubElement(idle, "name").text = "Idle"
-        ET.SubElement(idle, "label", kind="invariant").text = f"x <= {period}"
+        if period and not is_event_driven:
+            ET.SubElement(idle, "label", kind="invariant").text = f"x <= {period}"
 
         # Exec location
         exe = ET.SubElement(tpl, "location", id=f"{comp.name}_Exec")
@@ -314,12 +346,15 @@ class UppaalVerifier:
 
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        # Idle ➜ Exec – must fire exactly at x==period
+        # Idle ➜ Exec
         t1 = ET.SubElement(tpl, "transition")
         ET.SubElement(t1, "source", ref=idle.get("id"))
         ET.SubElement(t1, "target", ref=exe.get("id"))
-        ET.SubElement(t1, "label", kind="guard").text = f"x == {period}"
-        ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}!"
+        if is_event_driven:
+            ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}?"
+        else:
+            ET.SubElement(t1, "label", kind="guard").text = f"x == {period}"
+            ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}!"
         ET.SubElement(t1, "label", kind="assignment").text = (
             f"x = 0{', d = ' + str(deadline) if deadline is not None else ''}"
         )
@@ -376,12 +411,41 @@ class UppaalVerifier:
         tr2 = ET.SubElement(tpl, "transition")  # Wait → Idle
         ET.SubElement(tr2, "source", ref=wait.get("id"))
         ET.SubElement(tr2, "target", ref=idle.get("id"))
-        ET.SubElement(tr2, "label", kind="synchronisation").text = f"start_{dst_comp}?"
+        ET.SubElement(tr2, "label", kind="synchronisation").text = f"start_{dst_comp}!"
 
         tr3 = ET.SubElement(tpl, "transition")  # Wait → Bad
         ET.SubElement(tr3, "source", ref=wait.get("id"))
         ET.SubElement(tr3, "target", ref=bad.get("id"))
         ET.SubElement(tr3, "label", kind="guard").text = f"t > {budget}"
+
+        return tpl_name
+
+    # .....................................................................
+    # Environment trigger for event‑driven components with no inputs
+    # .....................................................................
+
+    def _emit_env_trigger(self, root: ET.Element, comp_name: str) -> str:
+        """Emit a simple template that fires ``start_<comp_name>!`` once at t=0."""
+
+        tpl_name = f"Env_{comp_name}"
+        tpl = ET.SubElement(root, "template")
+        ET.SubElement(tpl, "name").text = tpl_name
+        ET.SubElement(tpl, "declaration").text = "clock x;"
+
+        idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
+        ET.SubElement(idle, "name").text = "Idle"
+        ET.SubElement(idle, "label", kind="invariant").text = "x <= 0"
+
+        done = ET.SubElement(tpl, "location", id=f"{tpl_name}_Done")
+        ET.SubElement(done, "name").text = "Done"
+
+        ET.SubElement(tpl, "init", ref=idle.get("id"))
+
+        tr = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr, "source", ref=idle.get("id"))
+        ET.SubElement(tr, "target", ref=done.get("id"))
+        ET.SubElement(tr, "label", kind="guard").text = "x == 0"
+        ET.SubElement(tr, "label", kind="synchronisation").text = f"start_{comp_name}!"
 
         return tpl_name
 
@@ -415,10 +479,10 @@ class UppaalVerifier:
 
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        tr1 = ET.SubElement(tpl, "transition")  # Idle → Wait (src done)
+        tr1 = ET.SubElement(tpl, "transition")  # Idle → Wait (src start)
         ET.SubElement(tr1, "source", ref=idle.get("id"))
         ET.SubElement(tr1, "target", ref=wait.get("id"))
-        ET.SubElement(tr1, "label", kind="synchronisation").text = f"done_{src}?"
+        ET.SubElement(tr1, "label", kind="synchronisation").text = f"start_{src}?"
         ET.SubElement(tr1, "label", kind="assignment").text = "t = 0"
 
         tr2 = ET.SubElement(tpl, "transition")  # Wait → Idle (dst done)
