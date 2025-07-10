@@ -190,6 +190,7 @@ clock d;</declaration>
 clock d;</declaration>
     <location id="TrajectoryPlanner_B_Idle">
       <name>Idle</name>
+      <label kind="invariant">x &lt;= 20</label>
     </location>
     <location id="TrajectoryPlanner_B_Exec">
       <name>Exec</name>
@@ -202,7 +203,8 @@ clock d;</declaration>
     <transition>
       <source ref="TrajectoryPlanner_B_Idle" />
       <target ref="TrajectoryPlanner_B_Exec" />
-      <label kind="synchronisation">start_TrajectoryPlanner_B?</label>
+      <label kind="guard">x == 20</label>
+      <label kind="synchronisation">start_TrajectoryPlanner_B!</label>
       <label kind="assignment">x = 0, d = 50</label>
     </transition>
     <transition>
