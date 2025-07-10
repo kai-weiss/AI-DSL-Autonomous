@@ -62,6 +62,9 @@ SYSTEM CooperativeOvertaking {
     // V2V link from A back to B for permission acknowledgment (network latency budget)
     CONNECT PermissionAck: A.AckHandler_A.output -> B.PermissionAckRx_B.input { latency_budget = 8ms; }
 
+    // Internal connections on vehicle B
+    CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input { latency_budget = 0ms; }
+    CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input { latency_budget = 0ms; }
 
     PROPERTY EndToEndLatency {
         pattern   = BOUNDED_RESPONSE;          // real‑time PSP keyword
