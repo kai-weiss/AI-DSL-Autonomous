@@ -3,6 +3,7 @@ from __future__ import annotations
 import datetime as _dt
 import os
 import re
+import itertools
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -96,9 +97,15 @@ class UppaalVerifier:
         re.IGNORECASE,
     )
 
+    PIPELINE_RE = re.compile(
+        r"^\s*PIPELINE\s+(?P<seq>.+?)\s+WITHIN\s+(?P<val>\d+)\s*ms\s*$",
+        re.IGNORECASE | re.DOTALL,
+    )
+
     def _strip_qual(self, name: str) -> str:
         """Return the last component of a dotted identifier"""
         return name.split(".")[-1]
+
 
     def __init__(self, verifyta: str = "verifyta"):
         self.verifyta = verifyta
@@ -204,6 +211,26 @@ class UppaalVerifier:
             incoming[dst] = True
 
         # ------------------------------------------------------------------
+        # Connection drivers (glue – forward done→start)
+        # ------------------------------------------------------------------
+        driver_templates: set[str] = set()
+        for conn in getattr(model, "connections", []):  # type: ignore[attr-defined]
+            # Resolve component identifiers as used in the broadcast channels
+            src_comp = self._strip_qual(conn.src.split(".")[-2])
+            dst_comp = self._strip_qual(conn.dst.split(".")[-2])
+            # Skip connections that refer to unknown components
+            if src_comp not in model.components or dst_comp not in model.components:
+                continue
+            tpl_name = f"Conn_{src_comp}_to_{dst_comp}"
+            if tpl_name in driver_templates:
+                continue  # template already emitted & instantiated
+
+            tpl = self._emit_connection_driver(nta, src_comp, dst_comp)
+            driver_templates.add(tpl_name)
+            inst = f"D_{tpl_name}"
+            sys_inst.append(f"{inst} = {tpl_name}();")
+
+        # ------------------------------------------------------------------
         # Connection‑latency observers
         # ------------------------------------------------------------------
         for conn in getattr(model, "connections", []):  # type: ignore[attr-defined]
@@ -243,16 +270,26 @@ class UppaalVerifier:
                 queries[prop_name] = text  # raw UPPAAL query
                 continue
 
-            m = self.RESPONSE_RE.match(text)
-            if m:
-                src, dst, budget = m["src"], m["dst"], int(m["val"])
-                tpl = self._emit_e2e_observer(
-                    nta, self._strip_qual(src), self._strip_qual(dst), budget, prop_name
-                )
+            # Pipeline pattern
+            m_pl = self.PIPELINE_RE.match(text)
+            if m_pl:
+
+                seq_txt = m_pl.group("seq")
+                parts = [self._strip_qual(p.strip()) for p in seq_txt.split("->")]
+                parts = [p for p in parts if p]  # leere Einträge entfernen
+
+                print(parts)
+
+                first = parts[0]
+                pred = self._find_predecessor(first, getattr(model, "connections", []))
+                start_sync = f"done_{pred}?" if pred else f"start_{first}?"
+                print(start_sync)
+                tpl = self._emit_pipeline_observer(
+                    nta, prop_name, parts, int(m_pl.group("val")), start_sync)
                 inst = f"I_{tpl}"
                 sys_inst.append(f"{inst} = {tpl}();")
                 queries[prop_name] = f"A[] not {inst}.bad"
-                continue
+                print(queries)
 
             if "=" in text:
                 fields = {}
@@ -262,15 +299,6 @@ class UppaalVerifier:
                         continue
                     k, v = part.split("=", 1)
                     fields[k.strip()] = v.strip()
-                if fields.get("pattern") == "BOUNDED_RESPONSE":
-                    src = self._strip_qual(fields.get("stimulus", ""))
-                    dst = self._strip_qual(fields.get("response", ""))
-                    bound = _to_ms(fields.get("bound"))
-                    if src and dst and bound is not None:
-                        tpl = self._emit_e2e_observer(nta, src, dst, bound, prop_name)
-                        inst = f"I_{tpl}"
-                        sys_inst.append(f"{inst} = {tpl}();")
-                        queries[prop_name] = f"A[] not {inst}.bad"
 
         if "deadline_misses==0" not in queries and deadline_comps:
             locs = [f"P_{n}.bad" for n in deadline_comps]
@@ -320,11 +348,10 @@ class UppaalVerifier:
 
         is_event_driven = period_val is None
 
+
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = comp.name
         decl = ["clock x;"]
-        if deadline is not None:
-            decl.append("clock d;")
         ET.SubElement(tpl, "declaration").text = "\n".join(decl)
 
         # Idle location
@@ -355,9 +382,7 @@ class UppaalVerifier:
         else:
             ET.SubElement(t1, "label", kind="guard").text = f"x == {period}"
             ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}!"
-        ET.SubElement(t1, "label", kind="assignment").text = (
-            f"x = 0{', d = ' + str(deadline) if deadline is not None else ''}"
-        )
+        ET.SubElement(t1, "label", kind="assignment").text = "x = 0"
 
         # Exec ➜ Idle – finishes exactly at WCET
         t2 = ET.SubElement(tpl, "transition")
@@ -380,10 +405,8 @@ class UppaalVerifier:
 
     def _emit_connection_observer(self, root: ET.Element, conn: Connection) -> str:
         budget = conn.__dict__["__latency_ms"]
-
         src_comp = self._strip_qual(conn.src.split(".")[-2])
         dst_comp = self._strip_qual(conn.dst.split(".")[-2])
-
         tpl_name = f"Obs_{src_comp}_{dst_comp}"
 
         tpl = ET.SubElement(root, "template")
@@ -395,28 +418,29 @@ class UppaalVerifier:
 
         wait = ET.SubElement(tpl, "location", id=f"{tpl_name}_Wait")
         ET.SubElement(wait, "name").text = "Wait"
-        wait.set("invariant", f"t <= {budget}")
+        # Add invariant to prevent time from exceeding budget
+        ET.SubElement(wait, "label", kind="invariant").text = f"t <= {budget}"
 
         bad = ET.SubElement(tpl, "location", id=f"{tpl_name}_Bad")
         ET.SubElement(bad, "name").text = "bad"
 
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        tr1 = ET.SubElement(tpl, "transition")  # Idle → Wait
+        tr1 = ET.SubElement(tpl, "transition")
         ET.SubElement(tr1, "source", ref=idle.get("id"))
         ET.SubElement(tr1, "target", ref=wait.get("id"))
         ET.SubElement(tr1, "label", kind="synchronisation").text = f"done_{src_comp}?"
         ET.SubElement(tr1, "label", kind="assignment").text = "t = 0"
 
-        tr2 = ET.SubElement(tpl, "transition")  # Wait → Idle
+        tr2 = ET.SubElement(tpl, "transition")
         ET.SubElement(tr2, "source", ref=wait.get("id"))
         ET.SubElement(tr2, "target", ref=idle.get("id"))
-        ET.SubElement(tr2, "label", kind="synchronisation").text = f"start_{dst_comp}!"
+        ET.SubElement(tr2, "label", kind="synchronisation").text = f"start_{dst_comp}?"
 
-        tr3 = ET.SubElement(tpl, "transition")  # Wait → Bad
+        tr3 = ET.SubElement(tpl, "transition")
         ET.SubElement(tr3, "source", ref=wait.get("id"))
         ET.SubElement(tr3, "target", ref=bad.get("id"))
-        ET.SubElement(tr3, "label", kind="guard").text = f"t > {budget}"
+        ET.SubElement(tr3, "label", kind="guard").text = f"t == {budget}"
 
         return tpl_name
 
@@ -449,19 +473,69 @@ class UppaalVerifier:
 
         return tpl_name
 
-    # .....................................................................
-    # End‑to‑end response observer
-    # .....................................................................
+    def _emit_pipeline_observer(self, root: ET.Element,
+                                prop_name: str,
+                                comp_seq: List[str],
+                                bound_ms: int,
+                                start_sync: str) -> str:
+        base = re.sub(r"\W+", "_", prop_name)
+        tpl_name = f"PipeObs_{base}"
 
-    def _emit_e2e_observer(
-            self,
-            root: ET.Element,
-            src: str,
-            dst: str,
-            budget_ms: int,
-            prop_name: str,
-    ) -> str:
-        tpl_name = f"Obs_{prop_name}"
+        tpl = ET.SubElement(root, "template")
+        ET.SubElement(tpl, "name").text = tpl_name
+        ET.SubElement(tpl, "declaration").text = "clock t; int stage = 0;"
+
+        # ---------- locations ----------
+        idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
+        ET.SubElement(idle, "name").text = "Idle"
+
+        wait = ET.SubElement(tpl, "location", id=f"{tpl_name}_Wait")
+        ET.SubElement(wait, "name").text = "Wait"
+        ET.SubElement(wait, "label", kind="invariant").text = f"t <= {bound_ms}"
+
+
+        bad = ET.SubElement(tpl, "location", id=f"{tpl_name}_Bad")
+        ET.SubElement(bad, "name").text = "bad"
+
+        ET.SubElement(tpl, "init", ref=idle.get("id"))
+
+        first, last = comp_seq[0], comp_seq[-1]
+
+        # ---------- start the clock on *start_first* ----------
+        tr_start = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_start, "source", ref=idle.get("id"))
+        ET.SubElement(tr_start, "target", ref=wait.get("id"))
+        ET.SubElement(tr_start, "label", kind="synchronisation").text = start_sync
+        ET.SubElement(tr_start, "label", kind="assignment").text = "t = 0, stage = 0"
+
+        # ---------- advance after each *done* ----------
+        for idx, comp in enumerate(comp_seq):
+            trg = wait.get("id") if comp != last else idle.get("id")
+            tr = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr, "source", ref=wait.get("id"))
+            ET.SubElement(tr, "target", ref=trg)
+            ET.SubElement(tr, "label", kind="guard").text = f"stage == {idx}"
+            ET.SubElement(tr, "label", kind="synchronisation").text = f"done_{comp}?"
+            ET.SubElement(tr, "label", kind="assignment").text = (
+                "stage = stage + 1" if comp != last else "stage = 0"
+            )
+
+        # ---------- failure if clock hits the bound ----------
+        tr_bad = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_bad, "source", ref=wait.get("id"))
+        ET.SubElement(tr_bad, "target", ref=bad.get("id"))
+        ET.SubElement(tr_bad, "label", kind="guard").text = f"t == {bound_ms}"
+
+        return tpl_name
+
+    def _emit_component_latency_observer(self, root: ET.Element, comp, bound_ms: int) -> str:
+        """
+        Misst Ausführungs-Latenz einer Komponente:
+        start_<Comp>?  --> done_<Comp>?  muss innerhalb bound_ms liegen.
+        """
+        comp_name = comp
+        base = re.sub(r"\W+", "_", comp_name)
+        tpl_name = f"PipeObs_{base}"
 
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = tpl_name
@@ -470,29 +544,88 @@ class UppaalVerifier:
         idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
         ET.SubElement(idle, "name").text = "Idle"
 
-        wait = ET.SubElement(tpl, "location", id=f"{tpl_name}_Wait")
-        ET.SubElement(wait, "name").text = "Wait"
-        wait.set("invariant", f"t <= {budget_ms}")
+        run = ET.SubElement(tpl, "location", id=f"{tpl_name}_Run")
+        ET.SubElement(run, "name").text = "Run"
+        ET.SubElement(run, "label", kind="invariant").text = f"t <= {bound_ms}"
 
         bad = ET.SubElement(tpl, "location", id=f"{tpl_name}_Bad")
         ET.SubElement(bad, "name").text = "bad"
 
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        tr1 = ET.SubElement(tpl, "transition")  # Idle → Wait (src start)
-        ET.SubElement(tr1, "source", ref=idle.get("id"))
-        ET.SubElement(tr1, "target", ref=wait.get("id"))
-        ET.SubElement(tr1, "label", kind="synchronisation").text = f"start_{src}?"
-        ET.SubElement(tr1, "label", kind="assignment").text = "t = 0"
+        # Start
+        tr_start = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_start, "source", ref=idle.get("id"))
+        ET.SubElement(tr_start, "target", ref=run.get("id"))
+        ET.SubElement(tr_start, "label", kind="synchronisation").text = f"start_{comp_name}?"
+        ET.SubElement(tr_start, "label", kind="assignment").text = "t = 0"
 
-        tr2 = ET.SubElement(tpl, "transition")  # Wait → Idle (dst done)
-        ET.SubElement(tr2, "source", ref=wait.get("id"))
-        ET.SubElement(tr2, "target", ref=idle.get("id"))
-        ET.SubElement(tr2, "label", kind="synchronisation").text = f"done_{dst}?"
+        # Normales Ende (guard t <= bound_ms)
+        tr_done = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_done, "source", ref=run.get("id"))
+        ET.SubElement(tr_done, "target", ref=idle.get("id"))
+        ET.SubElement(tr_done, "label", kind="synchronisation").text = f"done_{comp_name}?"
+        ET.SubElement(tr_done, "label", kind="guard").text = f"t <= {bound_ms}"
 
-        tr3 = ET.SubElement(tpl, "transition")  # Wait → Bad (timeout)
-        ET.SubElement(tr3, "source", ref=wait.get("id"))
-        ET.SubElement(tr3, "target", ref=bad.get("id"))
-        ET.SubElement(tr3, "label", kind="guard").text = f"t > {budget_ms}"
+        # Verletzung
+        tr_bad = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_bad, "source", ref=run.get("id"))
+        ET.SubElement(tr_bad, "target", ref=bad.get("id"))
+        ET.SubElement(tr_bad, "label", kind="guard").text = f"t == {bound_ms}"
 
         return tpl_name
+
+    # --------------------------------------------------------------
+    # Connection driver: leitet done→start weiter
+    # --------------------------------------------------------------
+    def _emit_connection_driver(self, root: ET.Element,
+                                src_comp: str, dst_comp: str) -> str:
+        """
+        Erzeugt ein kleines UPPAAL‑Template, das bei
+            done_<src_comp>?   ⇒   start_<dst_comp>!
+        sofort in derselben Taktung auslöst.
+
+        Wegen der „nur ein Sync‑Label“-Regel werden zwei
+        Übergänge verwendet (Idle → Trig → Idle).
+        """
+        tpl_name = f"Conn_{src_comp}_to_{dst_comp}"
+
+        tpl = ET.SubElement(root, "template")
+        ET.SubElement(tpl, "name").text = tpl_name
+
+        # States ----------------------------------------------------
+        idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
+        ET.SubElement(idle, "name").text = "Idle"
+
+        trig = ET.SubElement(tpl, "location", id=f"{tpl_name}_Trig")
+        ET.SubElement(trig, "name").text = "Trig"
+        ET.SubElement(trig, "committed")  # sofortiger Rücksprung
+
+        ET.SubElement(tpl, "init", ref=idle.get("id"))
+
+        # 1. warten auf done_src?
+        t1 = ET.SubElement(tpl, "transition")
+        ET.SubElement(t1, "source", ref=idle.get("id"))
+        ET.SubElement(t1, "target", ref=trig.get("id"))
+        ET.SubElement(t1, "label", kind="synchronisation").text = f"done_{src_comp}?"
+
+        # 2. sofort start_dst! senden
+        t2 = ET.SubElement(tpl, "transition")
+        ET.SubElement(t2, "source", ref=trig.get("id"))
+        ET.SubElement(t2, "target", ref=idle.get("id"))
+        ET.SubElement(t2, "label", kind="synchronisation").text = f"start_{dst_comp}!"
+
+        return tpl_name
+
+    def _find_predecessor(self, comp_name: str, connections) -> str | None:
+        """
+        Liefert den Namen der Komponente, die über eine DSL‑Connection als
+        unmittelbarer Vorgänger von *comp_name* fungiert, oder None falls
+        kein eindeutiger Vorgänger existiert.
+        """
+        preds = {
+            self._strip_qual(c.src.split(".")[-2])
+            for c in connections
+            if self._strip_qual(c.dst.split(".")[-2]) == comp_name
+        }
+        return next(iter(preds)) if len(preds) == 1 else None
