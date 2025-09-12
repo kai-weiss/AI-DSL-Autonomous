@@ -22,6 +22,7 @@ class ASTBuilder(RoboticsVisitor):
 
     # connectDecl : CONNECT ID DOT ID ARROW ID DOT ID SEMI ;
     def visitConnectDecl(self, ctx: RoboticsParser.ConnectDeclContext):
+        conn_name = ctx.ID().getText()
         src_ctx = ctx.endpoint(0)
         dst_ctx = ctx.endpoint(1)
 
@@ -37,6 +38,7 @@ class ASTBuilder(RoboticsVisitor):
 
         self.model.connections.append(
             Connection(
+                conn_name,
                 f"{src_comp}.{src_port}",
                 f"{dst_comp}.{dst_port}",
                 budget,

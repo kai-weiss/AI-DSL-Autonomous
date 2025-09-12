@@ -106,7 +106,6 @@ class UppaalVerifier:
         """Return the last component of a dotted identifier"""
         return name.split(".")[-1]
 
-
     def __init__(self, verifyta: str = "verifyta"):
         self.verifyta = verifyta
 
@@ -162,7 +161,7 @@ class UppaalVerifier:
                     text=True,
                 )
                 out_lower = proc.stdout.lower()
-                print(out_lower)
+                # print(out_lower)
                 results[prop_name] = (
                         "formula is satisfied" in out_lower
                         or "pass" in out_lower
@@ -278,18 +277,28 @@ class UppaalVerifier:
                 parts = [self._strip_qual(p.strip()) for p in seq_txt.split("->")]
                 parts = [p for p in parts if p]  # leere Einträge entfernen
 
-                print(parts)
+                # print(parts)
 
                 first = parts[0]
-                pred = self._find_predecessor(first, getattr(model, "connections", []))
+                pred = self._find_predecessor(first,
+                                              getattr(model, "connections", []))
                 start_sync = f"done_{pred}?" if pred else f"start_{first}?"
-                print(start_sync)
+                # print(start_sync)
+
+                conn_budget: dict[tuple[str, str], int] = {}
+                for c in getattr(model, "connections", []):
+                    src = self._strip_qual(c.src.split(".")[-2])
+                    dst = self._strip_qual(c.dst.split(".")[-2])
+                    conn_budget[(src, dst)] = _to_ms(_get_latency_budget(c)) or 0
+
+                # print(conn_budget)
+
                 tpl = self._emit_pipeline_observer(
-                    nta, prop_name, parts, int(m_pl.group("val")), start_sync)
+                    nta, prop_name, parts, int(m_pl.group("val")), start_sync, conn_budget)
                 inst = f"I_{tpl}"
                 sys_inst.append(f"{inst} = {tpl}();")
                 queries[prop_name] = f"A[] not {inst}.bad"
-                print(queries)
+                # print(queries)
 
             if "=" in text:
                 fields = {}
@@ -348,7 +357,6 @@ class UppaalVerifier:
 
         is_event_driven = period_val is None
 
-
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = comp.name
         decl = ["clock x;"]
@@ -377,6 +385,7 @@ class UppaalVerifier:
         t1 = ET.SubElement(tpl, "transition")
         ET.SubElement(t1, "source", ref=idle.get("id"))
         ET.SubElement(t1, "target", ref=exe.get("id"))
+
         if is_event_driven:
             ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}?"
         else:
@@ -473,58 +482,145 @@ class UppaalVerifier:
 
         return tpl_name
 
-    def _emit_pipeline_observer(self, root: ET.Element,
-                                prop_name: str,
-                                comp_seq: List[str],
-                                bound_ms: int,
-                                start_sync: str) -> str:
+    def _emit_pipeline_observer(
+            self,
+            root: ET.Element,
+            prop_name: str,
+            seq: list[str],
+            bound_ms: int,
+            start_sync: str,
+            conn_budget: dict[tuple[str, str], int],
+    ) -> str:
+
         base = re.sub(r"\W+", "_", prop_name)
         tpl_name = f"PipeObs_{base}"
 
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = tpl_name
-        ET.SubElement(tpl, "declaration").text = "clock t; int stage = 0;"
+        ET.SubElement(tpl, "declaration").text = "clock t; clock e;"
 
-        # ---------- locations ----------
+        # Locations
         idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
         ET.SubElement(idle, "name").text = "Idle"
 
-        wait = ET.SubElement(tpl, "location", id=f"{tpl_name}_Wait")
-        ET.SubElement(wait, "name").text = "Wait"
-        ET.SubElement(wait, "label", kind="invariant").text = f"t <= {bound_ms}"
+        # For each component we create a location where we wait
+        # for its completion; the global bound applies as an invariant.
+        wait_loc: dict[str, ET.Element] = {}
+        for comp in seq:
+            L = ET.SubElement(tpl, "location", id=f"{tpl_name}_{comp}")
+            ET.SubElement(L, "name").text = f"Wait_{comp}"
+            ET.SubElement(L, "label", kind="invariant").text = f"t <= {bound_ms}"
+            wait_loc[comp] = L
 
+        # For each pipeline edge create an intermediate wait location
+        # this integrates periods
+        conn_loc: dict[tuple[str, str], ET.Element] = {}
+        for i in range(len(seq) - 1):
+            curr, nxt = seq[i], seq[i + 1]
+            C = ET.SubElement(tpl, "location", id=f"{tpl_name}_Conn_{curr}_to_{nxt}")
+            ET.SubElement(C, "name").text = f"Conn_{curr}_to_{nxt}"
+            # If a specific budget is given, enforce it as an invariant
+            budget = conn_budget.get((curr, nxt), 0)
+            if budget > 0:
+                ET.SubElement(C, "label", kind="invariant").text = f"e <= {budget}"
+            conn_loc[(curr, nxt)] = C
 
         bad = ET.SubElement(tpl, "location", id=f"{tpl_name}_Bad")
         ET.SubElement(bad, "name").text = "bad"
 
+        done = ET.SubElement(tpl, "location", id=f"{tpl_name}_Done")
+        ET.SubElement(done, "name").text = "Done"
+
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        first, last = comp_seq[0], comp_seq[-1]
+        # Transitions
 
-        # ---------- start the clock on *start_first* ----------
-        tr_start = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_start, "source", ref=idle.get("id"))
-        ET.SubElement(tr_start, "target", ref=wait.get("id"))
-        ET.SubElement(tr_start, "label", kind="synchronisation").text = start_sync
-        ET.SubElement(tr_start, "label", kind="assignment").text = "t = 0, stage = 0"
+        first = seq[0]
 
-        # ---------- advance after each *done* ----------
-        for idx, comp in enumerate(comp_seq):
-            trg = wait.get("id") if comp != last else idle.get("id")
-            tr = ET.SubElement(tpl, "transition")
-            ET.SubElement(tr, "source", ref=wait.get("id"))
-            ET.SubElement(tr, "target", ref=trg)
-            ET.SubElement(tr, "label", kind="guard").text = f"stage == {idx}"
-            ET.SubElement(tr, "label", kind="synchronisation").text = f"done_{comp}?"
-            ET.SubElement(tr, "label", kind="assignment").text = (
-                "stage = stage + 1" if comp != last else "stage = 0"
-            )
+        # If the pipeline starts on a predecessors done, we must first
+        # wait for start? before waiting for done?.
+        if start_sync.strip().startswith("done_"):
+            # reset e
+            tr0 = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr0, "source", ref=idle.get("id"))
+            entry_conn_id = f"{tpl_name}_Conn_ENTRY_to_{first}"
+            entry_conn = ET.SubElement(tpl, "location", id=entry_conn_id)
+            ET.SubElement(entry_conn, "name").text = f"Conn_ENTRY_to_{first}"
+            # Optional entry budget: if there is a declared (pred, first) budget, enforce it on e
+            try:
+                _pred = start_sync.strip()[len("done_"):-1]
+                _b = conn_budget.get((_pred, first), 0)
+                if _b > 0:
+                    ET.SubElement(entry_conn, "label", kind="invariant").text = f"e <= {_b}"
+                    tr0b_violate = ET.SubElement(tpl, "transition")
+                    ET.SubElement(tr0b_violate, "source", ref=entry_conn_id)
+                    ET.SubElement(tr0b_violate, "target", ref=bad.get("id"))
+                    ET.SubElement(tr0b_violate, "label", kind="guard").text = f"e == {_b}"
+            except Exception:
+                pass
+            # No invariant here; if a specific budget is desired for the entry
+            # edge, pass it through via conn_budget with key (pred, first)
+            ET.SubElement(tr0, "target", ref=entry_conn_id)
+            ET.SubElement(tr0, "label", kind="synchronisation").text = start_sync
+            ET.SubElement(tr0, "label", kind="assignment").text = "t = 0, e = 0"
 
-        # ---------- failure if clock hits the bound ----------
-        tr_bad = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_bad, "source", ref=wait.get("id"))
-        ET.SubElement(tr_bad, "target", ref=bad.get("id"))
-        ET.SubElement(tr_bad, "label", kind="guard").text = f"t == {bound_ms}"
+            # Conn_ENTRY_to_first --start_first?--> Wait_first
+            tr0b = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr0b, "source", ref=entry_conn_id)
+            ET.SubElement(tr0b, "target", ref=wait_loc[first].get("id"))
+            ET.SubElement(tr0b, "label", kind="synchronisation").text = f"start_{first}?"
+
+        else:
+            # Idle --start_first?--> Wait_first
+            tr_start = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_start, "source", ref=idle.get("id"))
+            ET.SubElement(tr_start, "target", ref=wait_loc[first].get("id"))
+            ET.SubElement(tr_start, "label", kind="synchronisation").text = start_sync
+            ET.SubElement(tr_start, "label", kind="assignment").text = "t = 0"
+
+        # For each internal edge: Wait_curr --done_curr?--> Conn_curr_to_next --start_next?--> Wait_next
+        for i in range(len(seq) - 1):
+            curr, nxt = seq[i], seq[i + 1]
+            # Wait for the current component to finish
+            tr1 = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr1, "source", ref=wait_loc[curr].get("id"))
+            ET.SubElement(tr1, "target", ref=conn_loc[(curr, nxt)].get("id"))
+            ET.SubElement(tr1, "label", kind="synchronisation").text = f"done_{curr}?"
+            ET.SubElement(tr1, "label", kind="assignment").text = "e = 0"
+
+            # Enforce per‑connection budget on the waiting time until next starts
+            budget = conn_budget.get((curr, nxt), 0)
+            if budget > 0:
+                tr_budget = ET.SubElement(tpl, "transition")
+                ET.SubElement(tr_budget, "source", ref=conn_loc[(curr, nxt)].get("id"))
+                ET.SubElement(tr_budget, "target", ref=bad.get("id"))
+                ET.SubElement(tr_budget, "label", kind="guard").text = f"e == {budget}"
+
+            # Only once the next component *starts* may we begin waiting for its completion
+            tr2 = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr2, "source", ref=conn_loc[(curr, nxt)].get("id"))
+            ET.SubElement(tr2, "target", ref=wait_loc[nxt].get("id"))
+            ET.SubElement(tr2, "label", kind="synchronisation").text = f"start_{nxt}?"
+
+        # Last completion closes the pipeline within the E2E bound
+        last = seq[-1]
+        tr_done = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_done, "source", ref=wait_loc[last].get("id"))
+        ET.SubElement(tr_done, "target", ref=done.get("id"))
+        ET.SubElement(tr_done, "label", kind="synchronisation").text = f"done_{last}?"
+        ET.SubElement(tr_done, "label", kind="guard").text = f"t <= {bound_ms}"
+
+        # Global timeout from every waiting state
+        for comp in seq:
+            tr_to_bad = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_to_bad, "source", ref=wait_loc[comp].get("id"))
+            ET.SubElement(tr_to_bad, "target", ref=bad.get("id"))
+            ET.SubElement(tr_to_bad, "label", kind="guard").text = f"t == {bound_ms}"
+
+        # Allow re‑use
+        tr_reset = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_reset, "source", ref=done.get("id"))
+        ET.SubElement(tr_reset, "target", ref=idle.get("id"))
 
         return tpl_name
 
@@ -616,6 +712,15 @@ class UppaalVerifier:
         ET.SubElement(t2, "label", kind="synchronisation").text = f"start_{dst_comp}!"
 
         return tpl_name
+
+    def _conn_budget_ms(self, src: str, dst: str, connections) -> int:
+        """liefert latency_budget für  src→dst  oder 0, falls keines"""
+        for c in connections:
+            if (self._strip_qual(c.src.split(".")[-2]) == src
+                    and self._strip_qual(c.dst.split(".")[-2]) == dst):
+                raw = _get_latency_budget(c)
+                return _to_ms(raw) or 0
+        return 0
 
     def _find_predecessor(self, comp_name: str, connections) -> str | None:
         """

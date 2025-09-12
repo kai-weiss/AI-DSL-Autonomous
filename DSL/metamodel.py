@@ -12,6 +12,7 @@ class Component:
 
 @dataclass
 class Connection:
+    name: str
     src: str
     dst: str
     latency_budget: timedelta | None = None
