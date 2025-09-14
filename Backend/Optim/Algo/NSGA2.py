@@ -44,12 +44,14 @@ class NSGAII:
 
     # ------------------------------------------------------------------
     def run(self) -> List[Individual]:
-        creator.create(
-            "FitnessMulti",
-            base.Fitness,
-            weights=(-1.0,) * self.num_objectives,
-        )
-        creator.create("Ind", list, fitness=creator.FitnessMulti)
+        if not hasattr(creator, "FitnessMulti"):
+            creator.create(
+                "FitnessMulti",
+                base.Fitness,
+                weights=(-1.0,) * self.num_objectives,
+            )
+        if not hasattr(creator, "Ind"):
+            creator.create("Ind", list, fitness=creator.FitnessMulti)
         toolbox = base.Toolbox()
 
         lows = [b[0] for b in self.bounds]
