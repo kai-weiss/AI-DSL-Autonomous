@@ -161,7 +161,7 @@ class UppaalVerifier:
                     text=True,
                 )
                 out_lower = proc.stdout.lower()
-                # print(out_lower)
+                print(out_lower)
                 results[prop_name] = (
                         "formula is satisfied" in out_lower
                         or "pass" in out_lower
@@ -183,10 +183,32 @@ class UppaalVerifier:
         nta = ET.Element("nta")
         global_decl = ET.SubElement(nta, "declaration")
 
-        # Broadcast channels for task lifecycle events
-        global_decl.text = "".join(
-            f"\n    broadcast chan start_{c.name}, done_{c.name};" for c in model.components.values()
-        ) + "\n  "
+        components = list(model.components.values())
+        index_map = {comp.name: idx for idx, comp in enumerate(components)}
+        priority_values = [
+            comp.priority if comp.priority is not None else 1000 + idx
+            for idx, comp in enumerate(components)
+        ]
+
+        decl_parts: list[str] = []
+        for comp in components:
+            decl_parts.append(f"broadcast chan start_{comp.name}, done_{comp.name};")
+        for comp in components:
+            decl_parts.append(f"broadcast chan release_{comp.name};")
+
+        if components:
+            decl_parts.append(f"const int NUM_COMPONENTS = {len(components)};")
+            for comp in components:
+                decl_parts.append(f"const int IDX_{comp.name} = {index_map[comp.name]};")
+            prio_list = ", ".join(str(p) for p in priority_values)
+            decl_parts.append(f"int priorities[NUM_COMPONENTS] = {{{prio_list}}};")
+            decl_parts.append("bool ready[NUM_COMPONENTS];")
+            decl_parts.append("int running = -1;")
+
+        if decl_parts:
+            global_decl.text = "\n    " + "\n    ".join(decl_parts) + "\n  "
+        else:
+            global_decl.text = "\n  "
 
         sys_inst: List[str] = []  # collects system instantiations
         queries: Dict[str, str] = {}
@@ -195,14 +217,24 @@ class UppaalVerifier:
         # Component templates
         # ------------------------------------------------------------------
         deadline_comps: List[str] = []
-        for comp in model.components.values():
-            self._emit_component_template(nta, comp)
+        for comp in components:
+            self._emit_component_template(nta, comp, index_map[comp.name])
             sys_inst.append(f"P_{comp.name} = {comp.name}();")
             if getattr(comp, "deadline", None) is not None:
                 deadline_comps.append(comp.name)
 
+        # Periodic release timers
+        for comp in components:
+            period_val = getattr(comp, "period", None)
+            if period_val is not None:
+                tpl_name = self._emit_periodic_timer(
+                    nta, comp.name, _to_ms(period_val)
+                )
+                sys_inst.append(f"T_{comp.name} = {tpl_name}();")
+
         # Determine which components have incoming connections
-        incoming: Dict[str, bool] = {c.name: False for c in model.components.values()}
+        incoming: Dict[str, bool] = {c.name: False for c in components}
+
         for conn in getattr(model, "connections", []):  # type: ignore[attr-defined]
             dst = conn.dst.split(".")[-2]
             dst = self._strip_qual(dst)
@@ -231,12 +263,24 @@ class UppaalVerifier:
         # ------------------------------------------------------------------
         # Environment triggers for components without inputs
         # ------------------------------------------------------------------
-        for comp in model.components.values():
+        for comp in components:
             period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
             if period_val is None and not incoming.get(comp.name):
                 tpl = self._emit_env_trigger(nta, comp.name)
                 inst = f"I_{tpl}"
                 sys_inst.append(f"{inst} = {tpl}();")
+
+        # ------------------------------------------------------------------
+        # Scheduler instance (fixed-priority dispatcher)
+        # ------------------------------------------------------------------
+        if components:
+            sched_tpl = self._emit_scheduler_template(
+                nta,
+                components,
+                index_map,
+                priority_values,
+            )
+            sys_inst.append(f"S = {sched_tpl}();")
 
         # ------------------------------------------------------------------
         # DSL PROPERTY clauses
@@ -327,7 +371,7 @@ class UppaalVerifier:
     # Template builders
     # ------------------------------------------------------------------
 
-    def _emit_component_template(self, root: ET.Element, comp: Component) -> None:
+    def _emit_component_template(self, root: ET.Element, comp: Component, idx: int) -> None:
         period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
         period = _to_ms(period_val or 0)
         wcet = _to_ms(getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None) or 0)
@@ -340,21 +384,25 @@ class UppaalVerifier:
 
         tpl = ET.SubElement(root, "template")
         ET.SubElement(tpl, "name").text = comp.name
-        decl = ["clock x;"]
+        decl = ["clock x;", "clock e;"]
         ET.SubElement(tpl, "declaration").text = "\n".join(decl)
 
-        # Idle location
+        # Locations --------------------------------------------------
         idle = ET.SubElement(tpl, "location", id=f"{comp.name}_Idle")
         ET.SubElement(idle, "name").text = "Idle"
         if period and not is_event_driven:
             ET.SubElement(idle, "label", kind="invariant").text = f"x <= {period}"
 
-        # Exec location
+        ready_loc = ET.SubElement(tpl, "location", id=f"{comp.name}_Ready")
+        ET.SubElement(ready_loc, "name").text = "Ready"
+
         exe = ET.SubElement(tpl, "location", id=f"{comp.name}_Exec")
         ET.SubElement(exe, "name").text = "Exec"
-        ET.SubElement(exe, "label", kind="invariant").text = f"x <= {wcet}"
+        exe_inv = [f"e <= {wcet}"]
+        if deadline is not None:
+            exe_inv.append(f"x <= {deadline}")
+        ET.SubElement(exe, "label", kind="invariant").text = " && ".join(exe_inv)
 
-        # (optional) Deadline-miss sink
         bad = None
         if deadline is not None:
             bad = ET.SubElement(tpl, "location", id=f"{comp.name}_DeadlineMiss")
@@ -362,38 +410,71 @@ class UppaalVerifier:
 
         ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-        # Idle ➜ Exec
-        t1 = ET.SubElement(tpl, "transition")
-        ET.SubElement(t1, "source", ref=idle.get("id"))
-        ET.SubElement(t1, "target", ref=exe.get("id"))
+        # Idle --release?--> Ready (job released)
+        tr_rel = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_rel, "source", ref=idle.get("id"))
+        ET.SubElement(tr_rel, "target", ref=ready_loc.get("id"))
+        ET.SubElement(tr_rel, "label", kind="synchronisation").text = f"release_{comp.name}?"
+        ET.SubElement(tr_rel, "label", kind="assignment").text = (
+            f"x = 0, ready[{idx}] = true"
+        )
 
-        if is_event_driven:
-            ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}?"
-        else:
-            ET.SubElement(t1, "label", kind="guard").text = f"x == {period}"
-            ET.SubElement(t1, "label", kind="synchronisation").text = f"start_{comp.name}!"
-        ET.SubElement(t1, "label", kind="assignment").text = "x = 0"
+        # Ready --start?--> Exec (dispatched by scheduler)
+        tr_start = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_start, "source", ref=ready_loc.get("id"))
+        ET.SubElement(tr_start, "target", ref=exe.get("id"))
+        ET.SubElement(tr_start, "label", kind="synchronisation").text = f"start_{comp.name}?"
+        ET.SubElement(tr_start, "label", kind="assignment").text = "e = 0"
 
-        # Exec ➜ Idle – finishes exactly at WCET
-        t2 = ET.SubElement(tpl, "transition")
-        ET.SubElement(t2, "source", ref=exe.get("id"))
-        ET.SubElement(t2, "target", ref=idle.get("id"))
-        ET.SubElement(t2, "label", kind="guard").text = f"x == {wcet}"
-        ET.SubElement(t2, "label", kind="synchronisation").text = f"done_{comp.name}!"
-        ET.SubElement(t2, "label", kind="assignment").text = "x = 0"
+        # Exec --done!--> Idle
+        tr_done = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_done, "source", ref=exe.get("id"))
+        ET.SubElement(tr_done, "target", ref=idle.get("id"))
+        ET.SubElement(tr_done, "label", kind="guard").text = f"e == {wcet}"
+        ET.SubElement(tr_done, "label", kind="synchronisation").text = f"done_{comp.name}!"
+        ET.SubElement(tr_done, "label", kind="assignment").text = "x = 0"
 
-        # Exec ➜ DeadlineMiss (optional)
+        # Deadline violations (if specified)
         if bad is not None:
-            t3 = ET.SubElement(tpl, "transition")
-            ET.SubElement(t3, "source", ref=exe.get("id"))
-            ET.SubElement(t3, "target", ref=bad.get("id"))
-            ET.SubElement(t3, "label", kind="guard").text = f"x > {deadline}"
+            tr_ready_bad = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_ready_bad, "source", ref=ready_loc.get("id"))
+            ET.SubElement(tr_ready_bad, "target", ref=bad.get("id"))
+            ET.SubElement(tr_ready_bad, "label", kind="guard").text = f"x > {deadline}"
+
+            tr_exec_bad = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_exec_bad, "source", ref=exe.get("id"))
+            ET.SubElement(tr_exec_bad, "target", ref=bad.get("id"))
+            ET.SubElement(tr_exec_bad, "label", kind="guard").text = f"x > {deadline}"
 
     # .....................................................................
-    # Environment trigger for event‑driven components with no inputs
+    # Periodic timer to trigger releases
+    # .....................................................................
+    def _emit_periodic_timer(self, root: ET.Element, comp_name: str, period_ms: int) -> str:
+        tpl_name = f"Timer_{comp_name}"
+        tpl = ET.SubElement(root, "template")
+        ET.SubElement(tpl, "name").text = tpl_name
+        ET.SubElement(tpl, "declaration").text = "clock t;"
+
+        wait = ET.SubElement(tpl, "location", id=f"{tpl_name}_Wait")
+        ET.SubElement(wait, "name").text = "Wait"
+        ET.SubElement(wait, "label", kind="invariant").text = f"t <= {period_ms}"
+
+        ET.SubElement(tpl, "init", ref=wait.get("id"))
+
+        tr = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr, "source", ref=wait.get("id"))
+        ET.SubElement(tr, "target", ref=wait.get("id"))
+        ET.SubElement(tr, "label", kind="guard").text = f"t == {period_ms}"
+        ET.SubElement(tr, "label", kind="synchronisation").text = f"release_{comp_name}!"
+        ET.SubElement(tr, "label", kind="assignment").text = "t = 0"
+
+        return tpl_name
+
+    # .....................................................................
+    # Environment trigger for components without inputs
     # .....................................................................
     def _emit_env_trigger(self, root: ET.Element, comp_name: str) -> str:
-        """Emit a simple template that fires ``start_<comp_name>!`` once at t=0."""
+        """Emit a one-shot release at time t = 0."""
 
         tpl_name = f"Env_{comp_name}"
         tpl = ET.SubElement(root, "template")
@@ -402,7 +483,7 @@ class UppaalVerifier:
 
         idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
         ET.SubElement(idle, "name").text = "Idle"
-        ET.SubElement(idle, "label", kind="invariant").text = "x <= 0"
+        ET.SubElement(idle, "committed")
 
         done = ET.SubElement(tpl, "location", id=f"{tpl_name}_Done")
         ET.SubElement(done, "name").text = "Done"
@@ -412,8 +493,109 @@ class UppaalVerifier:
         tr = ET.SubElement(tpl, "transition")
         ET.SubElement(tr, "source", ref=idle.get("id"))
         ET.SubElement(tr, "target", ref=done.get("id"))
-        ET.SubElement(tr, "label", kind="guard").text = "x == 0"
-        ET.SubElement(tr, "label", kind="synchronisation").text = f"start_{comp_name}!"
+        ET.SubElement(tr, "label", kind="synchronisation").text = f"release_{comp_name}!"
+
+        return tpl_name
+
+    # .....................................................................
+    # Fixed-priority scheduler
+    # .....................................................................
+    def _emit_scheduler_template(
+            self,
+            root: ET.Element,
+            components: list[Component],
+            index_map: dict[str, int],
+            priority_values: list[int],
+    ) -> str:
+
+        tpl_name = "Scheduler"
+        tpl = ET.SubElement(root, "template")
+        ET.SubElement(tpl, "name").text = tpl_name
+
+        idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
+        ET.SubElement(idle, "name").text = "Idle"
+
+        dispatch = ET.SubElement(tpl, "location", id=f"{tpl_name}_Dispatch")
+        ET.SubElement(dispatch, "name").text = "Dispatch"
+        ET.SubElement(dispatch, "committed")
+
+        post = ET.SubElement(tpl, "location", id=f"{tpl_name}_Post")
+        ET.SubElement(post, "name").text = "Post"
+        ET.SubElement(post, "committed")
+
+        busy = ET.SubElement(tpl, "location", id=f"{tpl_name}_Busy")
+        ET.SubElement(busy, "name").text = "Busy"
+
+        ET.SubElement(tpl, "init", ref=idle.get("id"))
+
+        ordered = sorted(
+            components,
+            key=lambda c: (priority_values[index_map[c.name]], c.name),
+        )
+
+        ready_terms = [f"ready[IDX_{c.name}]" for c in components]
+        some_ready = " || ".join(ready_terms)
+
+        # Wake the dispatcher whenever a job is released while the CPU is idle
+        for comp in components:
+            tr_rel = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_rel, "source", ref=idle.get("id"))
+            ET.SubElement(tr_rel, "target", ref=dispatch.get("id"))
+            ET.SubElement(tr_rel, "label", kind="synchronisation").text = (
+                f"release_{comp.name}?"
+            )
+
+        # Dispatch transitions (committed – pick highest-priority ready job)
+        for i, comp in enumerate(ordered):
+            idx = index_map[comp.name]
+            guard_terms = ["running == -1", f"ready[IDX_{comp.name}]"]
+            for prev in ordered[:i]:
+                guard_terms.append(f"!ready[IDX_{prev.name}]")
+
+            tr = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr, "source", ref=dispatch.get("id"))
+            ET.SubElement(tr, "target", ref=busy.get("id"))
+            ET.SubElement(tr, "label", kind="guard").text = " && ".join(guard_terms)
+            ET.SubElement(tr, "label", kind="synchronisation").text = f"start_{comp.name}!"
+            ET.SubElement(tr, "label", kind="assignment").text = (
+                f"running = IDX_{comp.name}, ready[IDX_{comp.name}] = false"
+            )
+
+        if some_ready:
+            # If somehow the dispatcher wakes without a pending job, fall back to idle
+            tr_disp_idle = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_disp_idle, "source", ref=dispatch.get("id"))
+            ET.SubElement(tr_disp_idle, "target", ref=idle.get("id"))
+            ET.SubElement(tr_disp_idle, "label", kind="guard").text = f"!({some_ready})"
+
+        # Completion transitions (Busy → committed post-processing)
+        for comp in components:
+            tr_done = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_done, "source", ref=busy.get("id"))
+            ET.SubElement(tr_done, "target", ref=post.get("id"))
+            ET.SubElement(tr_done, "label", kind="synchronisation").text = (
+                f"done_{comp.name}?"
+            )
+            ET.SubElement(tr_done, "label", kind="guard").text = (
+                f"running == IDX_{comp.name}"
+            )
+            ET.SubElement(tr_done, "label", kind="assignment").text = "running = -1"
+
+        if some_ready:
+            tr_post_dispatch = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_post_dispatch, "source", ref=post.get("id"))
+            ET.SubElement(tr_post_dispatch, "target", ref=dispatch.get("id"))
+            ET.SubElement(tr_post_dispatch, "label", kind="guard").text = some_ready
+
+            tr_post_idle = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_post_idle, "source", ref=post.get("id"))
+            ET.SubElement(tr_post_idle, "target", ref=idle.get("id"))
+            ET.SubElement(tr_post_idle, "label", kind="guard").text = f"!({some_ready})"
+        else:
+            # Degenerate case: no components – treat post as empty and drop to idle
+            tr_post_idle = ET.SubElement(tpl, "transition")
+            ET.SubElement(tr_post_idle, "source", ref=post.get("id"))
+            ET.SubElement(tr_post_idle, "target", ref=idle.get("id"))
 
         return tpl_name
 
@@ -574,17 +756,15 @@ class UppaalVerifier:
         return tpl_name
 
     # --------------------------------------------------------------
-    # Connection driver: leitet done→start weiter
+    # Connection driver: propagates done→release
     # --------------------------------------------------------------
     def _emit_connection_driver(self, root: ET.Element,
                                 src_comp: str, dst_comp: str) -> str:
         """
-        Erzeugt ein kleines UPPAAL‑Template, das bei
-            done_<src_comp>?   ⇒   start_<dst_comp>!
-        sofort in derselben Taktung auslöst.
-
-        Wegen der „nur ein Sync‑Label“-Regel werden zwei
-        Übergänge verwendet (Idle → Trig → Idle).
+        Emit a small adapter that forwards done_src? events as
+        release_dst! requests.  A committed intermediate state ensures
+        that the release is triggered immediately after the completion
+        notification
         """
         tpl_name = f"Conn_{src_comp}_to_{dst_comp}"
 
@@ -607,11 +787,11 @@ class UppaalVerifier:
         ET.SubElement(t1, "target", ref=trig.get("id"))
         ET.SubElement(t1, "label", kind="synchronisation").text = f"done_{src_comp}?"
 
-        # 2. sofort start_dst! senden
+        # 2. sofort release_dst! senden
         t2 = ET.SubElement(tpl, "transition")
         ET.SubElement(t2, "source", ref=trig.get("id"))
         ET.SubElement(t2, "target", ref=idle.get("id"))
-        ET.SubElement(t2, "label", kind="synchronisation").text = f"start_{dst_comp}!"
+        ET.SubElement(t2, "label", kind="synchronisation").text = f"release_{dst_comp}!"
 
         return tpl_name
 

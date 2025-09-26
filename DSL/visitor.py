@@ -9,16 +9,21 @@ class ASTBuilder(RoboticsVisitor):
         self.model = Model()
 
     # componentDecl : COMPONENT ID LBRACE componentBody RBRACE ;
-    def visitComponentDecl(self, ctx:RoboticsParser.ComponentDeclContext):
+    def visitComponentDecl(self, ctx: RoboticsParser.ComponentDeclContext):
         name = ctx.ID().getText()
         comp = Component(name)
         for attrCtx in ctx.componentBody().componentAttr():
             match attrCtx.start.type:
-                case RoboticsParser.PERIOD: comp.period = self._duration(attrCtx)
-                case RoboticsParser.DEADLINE: comp.deadline = self._duration(attrCtx)
-                case RoboticsParser.WCET: comp.wcet = self._duration(attrCtx)
+                case RoboticsParser.PERIOD:
+                    comp.period = self._duration(attrCtx)
+                case RoboticsParser.DEADLINE:
+                    comp.deadline = self._duration(attrCtx)
+                case RoboticsParser.WCET:
+                    comp.wcet = self._duration(attrCtx)
+                case RoboticsParser.PRIORITY:
+                    comp.priority = int(attrCtx.INT().getText())
         self.model.components[name] = comp
-        return None                           # do not recurse further
+        return None  # do not recurse further
 
     # connectDecl : CONNECT ID DOT ID ARROW ID DOT ID SEMI ;
     def visitConnectDecl(self, ctx: RoboticsParser.ConnectDeclContext):

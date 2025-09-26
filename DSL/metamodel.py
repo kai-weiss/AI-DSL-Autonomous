@@ -8,6 +8,7 @@ class Component:
     period: timedelta | None = None
     deadline: timedelta | None = None
     wcet: timedelta | None = None
+    priority: int | None = None
 
 
 @dataclass
