@@ -12,7 +12,7 @@ SYSTEM CooperativeOvertaking {
             period = 40ms;
             deadline = 40ms;
             WCET = 10ms;
-            priority = 2;
+            priority = 1;
         }
 
         COMPONENT AckHandler_A {
@@ -28,7 +28,7 @@ SYSTEM CooperativeOvertaking {
             period = 40ms;
             deadline = 40ms;
             WCET = 10ms;
-            priority = 2;
+            priority = 1;
         }
         COMPONENT PermissionReqTx_B {
             // Triggered when Perception_B detects a "slower vehicle ahead"
@@ -73,29 +73,22 @@ SYSTEM CooperativeOvertaking {
                -> PermissionAckRx_B
                -> TrajectoryPlanner_B
                -> Controller_B
-       WITHIN 163ms";
+       WITHIN 160ms";
 
     OPTIMISATION {
         VARIABLES {
             A.Perception_A.period    range 33ms .. 50ms;
-            //A.Perception_A.deadline  range 33ms .. 50ms;
             A.Perception_A.WCET      range 5ms .. 15ms;
             A.AckHandler_A.WCET      range 1ms .. 4ms;
-            //A.AckHandler_A.deadline  range 1ms  .. 4ms;
 
             B.Perception_B.period         range 33ms .. 50ms;
-            //B.Perception_B.deadline       range 33ms .. 50ms;
             B.Perception_B.WCET           range 5ms .. 15ms;
             B.PermissionReqTx_B.WCET      range 1ms .. 4ms;
-            //B.PermissionReqTx_B.deadline  range 1ms .. 4ms;
             B.PermissionAckRx_B.WCET      range 1ms .. 4ms;
-            //B.PermissionAckRx_B.deadline  range 1ms .. 4ms;
 
             B.TrajectoryPlanner_B.period   range 10ms .. 30ms;
-            //B.TrajectoryPlanner_B.deadline range 25ms .. 75ms;
             B.TrajectoryPlanner_B.WCET     range 10ms .. 30ms;
             B.Controller_B.WCET            range 3ms .. 7ms;
-            //B.Controller_B.deadline        range 3ms  .. 7ms;
 
             OvertakeRequest.latency_budget range 4ms .. 16ms;
             PermissionAck.latency_budget   range 4ms .. 16ms;
