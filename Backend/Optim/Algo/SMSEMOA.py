@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 import random
 
 from deap import base, creator, tools, algorithms
@@ -37,7 +37,10 @@ class SMSEMOA:
         self.num_objectives = len(self.evaluate(sample))
 
     # ------------------------------------------------------------------
-    def run(self) -> List[Individual]:
+    def run(
+        self,
+        log_history: bool = False,
+    ) -> List[Individual] | Tuple[List[Individual], List[List[List[float]]], int]:
         if not hasattr(creator, "FitnessMulti"):
             creator.create(
                 "FitnessMulti",
@@ -83,6 +86,9 @@ class SMSEMOA:
         for ind in population:
             ind.fitness.values = toolbox.evaluate(ind)
 
+        evaluations = len(population)
+        history: List[List[List[float]]] = []
+
         for _ in range(self.generations):
             offspring = algorithms.varOr(
                 population,
@@ -94,8 +100,13 @@ class SMSEMOA:
             for ind in offspring:
                 ind.fitness.values = toolbox.evaluate(ind)
 
+            evaluations += len(offspring)
             population.extend(offspring)
             population = self._reduce_population(population)
+
+            if log_history:
+                first_front = emo.sortNondominated(population, len(population))[0]
+                history.append([list(ind.fitness.values) for ind in first_front])
 
         fronts = emo.sortNondominated(population, len(population))
         for rank, front in enumerate(fronts):
@@ -114,6 +125,8 @@ class SMSEMOA:
                     crowding_distance=getattr(deap_ind, "crowding_dist", 0.0),
                 )
             )
+        if log_history:
+            return result, history, evaluations
         return result
 
     # ------------------------------------------------------------------

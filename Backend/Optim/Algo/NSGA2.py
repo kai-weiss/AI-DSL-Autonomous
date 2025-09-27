@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Tuple
 import random
 
 from deap import base, creator, tools, algorithms
@@ -36,7 +36,10 @@ class NSGAII:
         self.num_objectives = len(self.evaluate(sample))
 
     # ------------------------------------------------------------------
-    def run(self) -> List[Individual]:
+    def run(
+        self,
+        log_history: bool = False,
+    ) -> List[Individual] | Tuple[List[Individual], List[List[List[float]]], int]:
         if not hasattr(creator, "FitnessMulti"):
             creator.create(
                 "FitnessMulti",
@@ -83,16 +86,26 @@ class NSGAII:
         for ind in pop:
             ind.fitness.values = toolbox.evaluate(ind)
 
-        pop, _ = algorithms.eaMuPlusLambda(
-            pop,
-            toolbox,
-            mu=self.pop_size,
-            lambda_=self.pop_size,
-            cxpb=self.crossover_prob,
-            mutpb=self.mutation_prob,
-            ngen=self.generations,
-            verbose=False,
-        )
+        evaluations = len(pop)
+        history: List[List[List[float]]] = []
+
+        for _ in range(self.generations):
+            offspring = algorithms.varOr(
+                pop,
+                toolbox,
+                lambda_=self.pop_size,
+                cxpb=self.crossover_prob,
+                mutpb=self.mutation_prob,
+            )
+            for ind in offspring:
+                ind.fitness.values = toolbox.evaluate(ind)
+
+            evaluations += len(offspring)
+            pop = toolbox.select(pop + offspring, self.pop_size)
+
+            if log_history:
+                first_front = emo.sortNondominated(pop, len(pop))[0]
+                history.append([list(ind.fitness.values) for ind in first_front])
 
         fronts = emo.sortNondominated(pop, len(pop))
         for rank, front in enumerate(fronts):
@@ -111,4 +124,7 @@ class NSGAII:
                     crowding_distance=getattr(deap_ind, "crowding_dist", 0.0),
                 )
             )
+
+        if log_history:
+            return result, history, evaluations
         return result
