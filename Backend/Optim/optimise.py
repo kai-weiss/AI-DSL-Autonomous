@@ -100,56 +100,118 @@ def _objective_direction(raw: str) -> str:
     return "max" if s.startswith(("maximise", "maximize")) else "min"
 
 
+def _normalise_expression(expr: str) -> str:
+    """Insert spacing around common operators to improve readability"""
+
+    operators = ["==", "!=", "<=", ">=", "&&", "||", "<", ">", "+", "-", "*", "/"]
+    for op in operators:
+        expr = expr.replace(op, f" {op} ")
+    return " ".join(expr.split())
+
+
 def emit_model(model: Model) -> str:
     """Serialize model back into the DSL format"""
     lines: List[str] = []
 
-    for comp in model.components.values():
-        lines.append(f"COMPONENT {comp.name} {{")
+    system_name = getattr(model, "system_name", None) or "System"
+    lines.append(f"SYSTEM {system_name} {{")
+
+    if getattr(model, "cpu_attrs", None):
+        lines.append("    CPU {")
+        for key, value in model.cpu_attrs:
+            lines.append(f"        {key} = {value};")
+        lines.append("    }")
+        lines.append("")
+
+    emitted: set[str] = set()
+
+    def emit_component(comp, indent: str) -> List[str]:
+        block: List[str] = [f"{indent}COMPONENT {comp.name} {{"]
         if comp.period is not None:
-            lines.append(f"    period   = {_ms(comp.period)};")
+            block.append(f"{indent}    period = {_ms(comp.period)};")
         if comp.deadline is not None:
-            lines.append(f"    deadline = {_ms(comp.deadline)};")
+            block.append(f"{indent}    deadline = {_ms(comp.deadline)};")
         if comp.wcet is not None:
-            lines.append(f"    WCET     = {_ms(comp.wcet)};")
-        lines.append("}")
+            block.append(f"{indent}    WCET = {_ms(comp.wcet)};")
+        if comp.priority is not None:
+            block.append(f"{indent}    priority = {comp.priority};")
+        block.append(f"{indent}}}")
+        return block
+
+    for vehicle in getattr(model, "vehicle_order", []):
+        comps = model.vehicles.get(vehicle, [])
+        lines.append(f"    VEHICLE {vehicle} {{")
+        for idx, comp_name in enumerate(comps):
+            comp = model.components.get(comp_name)
+            if not comp:
+                continue
+            lines.extend(emit_component(comp, "        "))
+            emitted.add(comp_name)
+            if idx != len(comps) - 1:
+                lines.append("")
+        lines.append("    }")
+        lines.append("")
+
+    for comp_name, comp in model.components.items():
+        if comp_name in emitted:
+            continue
+        lines.extend(emit_component(comp, "    "))
         lines.append("")
 
     for conn in getattr(model, "connections", []):
-        lines.append(f"CONNECT {conn.src} -> {conn.dst} {{")
+        lines.append(
+            f"    CONNECT {conn.name}: {conn.src} -> {conn.dst} {{"
+        )
         if conn.latency_budget is not None:
-            lines.append(f"    latency_budget = {_ms(conn.latency_budget)};")
-        lines.append("}")
+            lines.append(
+                f"        latency_budget = {_ms(conn.latency_budget)};"
+            )
+        lines.append("    }")
         lines.append("")
 
-    for name, text in model.properties.items():
-        lines.append(f"PROPERTY {name}: \"{text}\";")
     if model.properties:
-        lines.append("")
+        for name, text in model.properties.items():
+            lines.append(f"    PROPERTY {name}:")
+            indent = "      "
+            escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+            formatted = escaped.replace("\n", f"\n{indent}")
+            lines.append(f"{indent}\"{formatted}\";")
+            lines.append("")
 
     spec = getattr(model, "optimisation", None)
     if spec and getattr(spec, "variables", None):
-        lines.append("OPTIMISATION {")
-        lines.append("    VARIABLES {")
+        lines.append("    OPTIMISATION {")
+        lines.append("        VARIABLES {")
         for var in spec.variables:
-            l = _ms(var.lower)
-            h = _ms(var.upper)
-            lines.append(f"        {var.ref} range {l} .. {h};")
-        lines.append("    }")
+            lower = _ms(var.lower)
+            upper = _ms(var.upper)
+            lines.append(
+                f"            {var.ref} range {lower} .. {upper};"
+            )
+        lines.append("        }")
         if spec.objectives:
-            lines.append("    OBJECTIVES{")
+            lines.append("        OBJECTIVES{")
             for obj in spec.objectives:
-                # print(obj)
-                lines.append(f"        {obj}")
-            lines.append("    }")
+                lines.append(f"            {obj}")
+            lines.append("        }")
         if spec.constraints:
-            lines.append("    CONSTRAINTS{")
+            lines.append("        CONSTRAINTS{")
             for c in spec.constraints:
-                lines.append(f"        assert {c};")
-            lines.append("    }")
-        lines.append("}")
+                lines.append(
+                    f"            assert {_normalise_expression(c)};"
+                )
+            lines.append("        }")
+        lines.append("    }")
 
-    return "\n".join(lines) + "\n"
+    lines.append("}")
+
+    cleaned: List[str] = []
+    for line in lines:
+        if line == "" and cleaned and cleaned[-1] == "":
+            continue
+        cleaned.append(line)
+
+    return "\n".join(cleaned) + "\n"
 
 
 def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float]]:

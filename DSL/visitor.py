@@ -8,6 +8,7 @@ class ASTBuilder(RoboticsVisitor):
     def __init__(self):
         self.model = Model()
         self._vehicle_stack: list[str] = []
+        self._seen_vehicles: set[str] = set()
 
     # componentDecl : COMPONENT ID LBRACE componentBody RBRACE ;
     def visitComponentDecl(self, ctx: RoboticsParser.ComponentDeclContext):
@@ -15,6 +16,10 @@ class ASTBuilder(RoboticsVisitor):
         comp = Component(name)
         if self._vehicle_stack:
             comp.vehicle = self._vehicle_stack[-1]
+            vehicle = comp.vehicle
+            if vehicle not in self.model.vehicles:
+                self.model.vehicles[vehicle] = []
+            self.model.vehicles[vehicle].append(comp.name)
         for attrCtx in ctx.componentBody().componentAttr():
             match attrCtx.start.type:
                 case RoboticsParser.PERIOD:
@@ -81,13 +86,20 @@ class ASTBuilder(RoboticsVisitor):
 
     # systemDecl : SYSTEM ID LBRACE statement* RBRACE ;
     def visitSystemDecl(self, ctx: RoboticsParser.SystemDeclContext):
+        self.model.system_name = ctx.ID().getText()
         for elem in ctx.statement():
             self.visit(elem)
         return None
 
     # vehicleDecl : VEHICLE ID LBRACE componentDecl* RBRACE ;
     def visitVehicleDecl(self, ctx: RoboticsParser.VehicleDeclContext):
-        self._vehicle_stack.append(ctx.ID().getText())
+        vehicle_name = ctx.ID().getText()
+        if vehicle_name not in self._seen_vehicles:
+            self.model.vehicle_order.append(vehicle_name)
+            self._seen_vehicles.add(vehicle_name)
+        if vehicle_name not in self.model.vehicles:
+            self.model.vehicles[vehicle_name] = []
+        self._vehicle_stack.append(vehicle_name)
         try:
             for comp in ctx.componentDecl():
                 self.visit(comp)
@@ -97,7 +109,10 @@ class ASTBuilder(RoboticsVisitor):
 
     # cpuDecl : CPU LBRACE cpuAttr* RBRACE ;
     def visitCpuDecl(self, ctx: RoboticsParser.CpuDeclContext):
-        # CPU information is ignored for now
+        for attrCtx in ctx.cpuAttr():
+            key = attrCtx.getChild(0).getText()
+            value = attrCtx.getChild(2).getText()
+            self.model.cpu_attrs.append((key, value))
         return None
 
     # optimisationBlock : OPTIMISATION '{' VARIABLES '{' variableDecl+ '}'
@@ -108,7 +123,11 @@ class ASTBuilder(RoboticsVisitor):
             spec.variables.append(self._variable(varCtx))
         # OBJECTIVE declarations
         for objCtx in ctx.objectiveDecl():
-            spec.objectives.append(objCtx.getText())
+            if objCtx.MINIMISE():
+                verb = objCtx.MINIMISE().getText()
+            else:
+                verb = objCtx.MAXIMISE().getText()
+            spec.objectives.append(f"{verb} {objCtx.ID().getText()};")
         # CONSTRAINT declarations
         for conCtx in ctx.constraintDecl():
             # strip leading 'assert ' and trailing ';'

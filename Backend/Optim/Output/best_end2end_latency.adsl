@@ -1,85 +1,104 @@
-COMPONENT Perception_A {
-    period   = 40ms;
-    deadline = 40ms;
-    WCET     = 5ms;
-}
-
-COMPONENT AckHandler_A {
-    deadline = 2ms;
-    WCET     = 1ms;
-}
-
-COMPONENT Perception_B {
-    period   = 42ms;
-    deadline = 40ms;
-    WCET     = 9ms;
-}
-
-COMPONENT PermissionReqTx_B {
-    deadline = 2ms;
-    WCET     = 3ms;
-}
-
-COMPONENT PermissionAckRx_B {
-    deadline = 2ms;
-    WCET     = 3ms;
-}
-
-COMPONENT TrajectoryPlanner_B {
-    period   = 26ms;
-    deadline = 20ms;
-    WCET     = 16ms;
-}
-
-COMPONENT Controller_B {
-    deadline = 25ms;
-    WCET     = 6ms;
-}
-
-CONNECT B.PermissionReqTx_B.output -> A.AckHandler_A.input {
-    latency_budget = 8ms;
-}
-
-CONNECT A.AckHandler_A.output -> B.PermissionAckRx_B.input {
-    latency_budget = 7ms;
-}
-
-CONNECT B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input {
-    latency_budget = 2ms;
-}
-
-CONNECT B.TrajectoryPlanner_B.output -> B.Controller_B.input {
-    latency_budget = 100ms;
-}
-
-PROPERTY EndToEndLatency: "PIPELINE PermissionReqTx_B
-               -> AckHandler_A
-               -> PermissionAckRx_B
-               -> TrajectoryPlanner_B
-               -> Controller_B
-       WITHIN 145ms";
-
-OPTIMISATION {
-    VARIABLES {
-        A.Perception_A.period range 33ms .. 50ms;
-        A.Perception_A.WCET range 5ms .. 15ms;
-        A.AckHandler_A.WCET range 1ms .. 4ms;
-        B.Perception_B.period range 33ms .. 50ms;
-        B.Perception_B.WCET range 5ms .. 15ms;
-        B.PermissionReqTx_B.WCET range 1ms .. 4ms;
-        B.PermissionAckRx_B.WCET range 1ms .. 4ms;
-        B.TrajectoryPlanner_B.period range 10ms .. 30ms;
-        B.TrajectoryPlanner_B.WCET range 10ms .. 30ms;
-        B.Controller_B.WCET range 3ms .. 7ms;
-        OvertakeRequest.latency_budget range 4ms .. 16ms;
-        PermissionAck.latency_budget range 4ms .. 16ms;
+SYSTEM CooperativeOvertaking {
+    CPU {
+        cores = 1;
+        scheduler = PREEMPTIVE_FP;
     }
-    OBJECTIVES{
-        minimiseworst_end2end_latency;
-        minimisemax_core_utilisation;
+
+    VEHICLE A {
+        COMPONENT Perception_A {
+            period = 41ms;
+            deadline = 40ms;
+            WCET = 5ms;
+            priority = 1;
+        }
+
+        COMPONENT AckHandler_A {
+            deadline = 2ms;
+            WCET = 1ms;
+            priority = 1;
+        }
     }
-    CONSTRAINTS{
-        assert EndToEndLatency;
-        assert deadline_misses==0;
+
+    VEHICLE B {
+        COMPONENT Perception_B {
+            period = 37ms;
+            deadline = 40ms;
+            WCET = 6ms;
+            priority = 1;
+        }
+
+        COMPONENT PermissionReqTx_B {
+            deadline = 2ms;
+            WCET = 1ms;
+            priority = 1;
+        }
+
+        COMPONENT PermissionAckRx_B {
+            deadline = 2ms;
+            WCET = 1ms;
+            priority = 1;
+        }
+
+        COMPONENT TrajectoryPlanner_B {
+            period = 23ms;
+            deadline = 20ms;
+            WCET = 12ms;
+            priority = 1;
+        }
+
+        COMPONENT Controller_B {
+            deadline = 25ms;
+            WCET = 5ms;
+            priority = 1;
+        }
+    }
+
+    CONNECT OvertakeRequest: B.PermissionReqTx_B.output -> A.AckHandler_A.input {
+        latency_budget = 5ms;
+    }
+
+    CONNECT PermissionAck: A.AckHandler_A.output -> B.PermissionAckRx_B.input {
+        latency_budget = 15ms;
+    }
+
+    CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input {
+        latency_budget = 2ms;
+    }
+
+    CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input {
+        latency_budget = 100ms;
+    }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE PermissionReqTx_B
+                     -> AckHandler_A
+                     -> PermissionAckRx_B
+                     -> TrajectoryPlanner_B
+                     -> Controller_B
+             WITHIN 145ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            A.Perception_A.period range 33ms .. 50ms;
+            A.Perception_A.WCET range 5ms .. 15ms;
+            A.AckHandler_A.WCET range 1ms .. 4ms;
+            B.Perception_B.period range 33ms .. 50ms;
+            B.Perception_B.WCET range 5ms .. 15ms;
+            B.PermissionReqTx_B.WCET range 1ms .. 4ms;
+            B.PermissionAckRx_B.WCET range 1ms .. 4ms;
+            B.TrajectoryPlanner_B.period range 10ms .. 30ms;
+            B.TrajectoryPlanner_B.WCET range 10ms .. 30ms;
+            B.Controller_B.WCET range 3ms .. 7ms;
+            OvertakeRequest.latency_budget range 4ms .. 16ms;
+            PermissionAck.latency_budget range 4ms .. 16ms;
+        }
+        OBJECTIVES{
+            minimise worst_end2end_latency;
+            minimise max_core_utilisation;
+        }
+        CONSTRAINTS{
+            assert EndToEndLatency;
+            assert deadline_misses == 0;
+        }
     }
 }
