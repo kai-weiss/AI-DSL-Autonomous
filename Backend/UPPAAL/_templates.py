@@ -5,7 +5,7 @@ from typing import Dict, List
 
 from DSL.metamodel import Component  # type: ignore
 
-from _conversions import to_ms
+from Backend.UPPAAL._conversions import to_ms
 
 __all__ = [
     "emit_component_template",

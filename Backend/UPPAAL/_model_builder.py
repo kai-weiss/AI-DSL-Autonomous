@@ -7,10 +7,10 @@ from typing import Dict, List, Pattern
 
 from DSL.metamodel import Component, Model
 
-from _conversions import get_latency_budget, to_ms
-from _pipeline import emit_pipeline_observer, find_predecessor
-from _query_bundle import QueryBundle
-from _templates import (
+from Backend.UPPAAL._conversions import get_latency_budget, to_ms
+from Backend.UPPAAL._pipeline import emit_pipeline_observer, find_predecessor
+from Backend.UPPAAL._query_bundle import QueryBundle
+from Backend.UPPAAL._templates import (
     emit_component_template,
     emit_connection_driver,
     emit_env_trigger,
