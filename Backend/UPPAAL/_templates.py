@@ -5,7 +5,7 @@ from typing import Dict, List
 
 from DSL.metamodel import Component  # type: ignore
 
-from ._conversions import to_ms
+from _conversions import to_ms
 
 __all__ = [
     "emit_component_template",
@@ -16,7 +16,9 @@ __all__ = [
 ]
 
 
-def emit_component_template(root: ET.Element, comp: Component, idx: int) -> None:
+def emit_component_template(
+    root: ET.Element, comp: Component, idx: int, sched_prefix: str
+) -> None:
     period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
     period = to_ms(period_val or 0)
     wcet = to_ms(getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None) or 0)
@@ -62,8 +64,9 @@ def emit_component_template(root: ET.Element, comp: Component, idx: int) -> None
     ET.SubElement(tr_rel, "source", ref=idle.get("id"))
     ET.SubElement(tr_rel, "target", ref=ready_loc.get("id"))
     ET.SubElement(tr_rel, "label", kind="synchronisation").text = f"release_{comp.name}?"
+    ready_arr = f"ready_{sched_prefix}"
     ET.SubElement(tr_rel, "label", kind="assignment").text = (
-        f"x = 0, ready[{idx}] = true"
+        f"x = 0, {ready_arr}[{idx}] = true"
     )
 
     # Ready --start?--> Exec (dispatched by scheduler)
@@ -147,11 +150,11 @@ def emit_env_trigger(root: ET.Element, comp_name: str) -> str:
 def emit_scheduler_template(
     root: ET.Element,
     components: List[Component],
-    index_map: Dict[str, int],
-    priority_values: List[int],
+    priority_map: Dict[str, int],
+    prefix: str,
 ) -> str:
     """Fixed-priority scheduler"""
-    tpl_name = "Scheduler"
+    tpl_name = f"Scheduler_{prefix}"
     tpl = ET.SubElement(root, "template")
     ET.SubElement(tpl, "name").text = tpl_name
 
@@ -172,11 +175,12 @@ def emit_scheduler_template(
     ET.SubElement(tpl, "init", ref=idle.get("id"))
 
     ordered = sorted(
-        components, key=lambda c: (priority_values[index_map[c.name]], c.name)
+        components, key=lambda c: (priority_map[c.name], c.name)
     )
 
-    ready_terms = [f"ready[IDX_{c.name}]" for c in components]
+    ready_terms = [f"ready_{prefix}[IDX_{c.name}]" for c in components]
     some_ready = " || ".join(ready_terms)
+    running_var = f"running_{prefix}"
 
     # Wake the dispatcher whenever a job is released while the CPU is idle
     for comp in components:
@@ -187,12 +191,11 @@ def emit_scheduler_template(
             f"release_{comp.name}?"
         )
 
-        # Dispatch transitions (committed – pick highest-priority ready job)
+    # Dispatch transitions (committed – pick highest-priority ready job)
     for i, comp in enumerate(ordered):
-        idx = index_map[comp.name]
-        guard_terms = ["running == -1", f"ready[IDX_{comp.name}]"]
+        guard_terms = [f"{running_var} == -1", f"ready_{prefix}[IDX_{comp.name}]"]
         for prev in ordered[:i]:
-            guard_terms.append(f"!ready[IDX_{prev.name}]")
+            guard_terms.append(f"!ready_{prefix}[IDX_{prev.name}]")
 
         tr = ET.SubElement(tpl, "transition")
         ET.SubElement(tr, "source", ref=dispatch.get("id"))
@@ -200,7 +203,7 @@ def emit_scheduler_template(
         ET.SubElement(tr, "label", kind="guard").text = " && ".join(guard_terms)
         ET.SubElement(tr, "label", kind="synchronisation").text = f"start_{comp.name}!"
         ET.SubElement(tr, "label", kind="assignment").text = (
-            f"running = IDX_{comp.name}, ready[IDX_{comp.name}] = false"
+            f"{running_var} = IDX_{comp.name}, ready_{prefix}[IDX_{comp.name}] = false"
         )
 
     if some_ready:
@@ -219,9 +222,11 @@ def emit_scheduler_template(
             f"done_{comp.name}?"
         )
         ET.SubElement(tr_done, "label", kind="guard").text = (
-            f"running == IDX_{comp.name}"
+            f"{running_var} == IDX_{comp.name}"
         )
-        ET.SubElement(tr_done, "label", kind="assignment").text = "running = -1"
+        ET.SubElement(tr_done, "label", kind="assignment").text = (
+            f"{running_var} = -1"
+        )
 
     if some_ready:
         tr_post_dispatch = ET.SubElement(tpl, "transition")

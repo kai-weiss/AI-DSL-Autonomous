@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import re
 import tempfile
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Pattern
 
-from DSL.metamodel import Component, Model  # type: ignore
+from DSL.metamodel import Component, Model
 
-from ._conversions import get_latency_budget, to_ms
-from ._pipeline import emit_pipeline_observer, find_predecessor
-from ._query_bundle import QueryBundle
-from ._templates import (
+from _conversions import get_latency_budget, to_ms
+from _pipeline import emit_pipeline_observer, find_predecessor
+from _query_bundle import QueryBundle
+from _templates import (
     emit_component_template,
     emit_connection_driver,
     emit_env_trigger,
@@ -28,16 +29,36 @@ class ModelBuilder:
     def _strip_qual(name: str) -> str:
         return name.split(".")[-1]
 
+    @staticmethod
+    def _sched_prefix(vehicle: str | None) -> str:
+        if not vehicle:
+            return "GLOBAL"
+        return re.sub(r"\W", "_", vehicle)
+
     def build(self, model: Model) -> QueryBundle:
         nta = ET.Element("nta")
         global_decl = ET.SubElement(nta, "declaration")
 
         components = list(model.components.values())
-        index_map = {comp.name: idx for idx, comp in enumerate(components)}
-        priority_values = [
-            comp.priority if comp.priority is not None else 1000 + idx
-            for idx, comp in enumerate(components)
-        ]
+        group_data: Dict[str, Dict[str, object]] = {}
+        component_prefix: Dict[str, str] = {}
+        component_index: Dict[str, int] = {}
+
+        for comp in components:
+            prefix = self._sched_prefix(getattr(comp, "vehicle", None))
+            component_prefix[comp.name] = prefix
+            data = group_data.setdefault(prefix, {"components": []})
+            data["components"].append(comp)  # type: ignore[arg-type]
+
+        for prefix, data in group_data.items():
+            comps: List[Component] = data["components"]  # type: ignore[assignment]
+            prio_map: Dict[str, int] = {}
+            for idx, comp in enumerate(comps):
+                component_index[comp.name] = idx
+                prio_map[comp.name] = (
+                    comp.priority if comp.priority is not None else 1000 + idx
+                )
+            data["prio_map"] = prio_map
 
         decl_parts: list[str] = []
         for comp in components:
@@ -45,14 +66,24 @@ class ModelBuilder:
         for comp in components:
             decl_parts.append(f"broadcast chan release_{comp.name};")
 
-        if components:
-            decl_parts.append(f"const int NUM_COMPONENTS = {len(components)};")
-            for comp in components:
-                decl_parts.append(f"const int IDX_{comp.name} = {index_map[comp.name]};")
-            prio_list = ", ".join(str(p) for p in priority_values)
-            decl_parts.append(f"int priorities[NUM_COMPONENTS] = {{{prio_list}}};")
-            decl_parts.append("bool ready[NUM_COMPONENTS];")
-            decl_parts.append("int running = -1;")
+        for prefix, data in group_data.items():
+            comps: List[Component] = data["components"]  # type: ignore[assignment]
+            if not comps:
+                continue
+            decl_parts.append(
+                f"const int NUM_COMPONENTS_{prefix} = {len(comps)};"
+            )
+            for comp in comps:
+                decl_parts.append(
+                    f"const int IDX_{comp.name} = {component_index[comp.name]};"
+                )
+            prio_map: Dict[str, int] = data["prio_map"]  # type: ignore[assignment]
+            prio_list = ", ".join(str(prio_map[comp.name]) for comp in comps)
+            decl_parts.append(
+                f"int priorities_{prefix}[NUM_COMPONENTS_{prefix}] = {{{prio_list}}};"
+            )
+            decl_parts.append(f"bool ready_{prefix}[NUM_COMPONENTS_{prefix}];")
+            decl_parts.append(f"int running_{prefix} = -1;")
 
         global_decl.text = "\n    " + "\n    ".join(decl_parts) + "\n  " if decl_parts else "\n  "
 
@@ -60,7 +91,7 @@ class ModelBuilder:
         queries: Dict[str, str] = {}
 
         # Determine which components have incoming connections.  This needs to
-        # happen **before** we decide whether to emit periodic release timers so
+        # happen before we decide whether to emit periodic release timers so
         # that we do not create artificial timers for components that are
         # triggered exclusively via connections.
         incoming: Dict[str, bool] = {c.name: False for c in components}
@@ -76,7 +107,8 @@ class ModelBuilder:
         # ------------------------------------------------------------------
         deadline_comps: List[str] = []
         for comp in components:
-            emit_component_template(nta, comp, index_map[comp.name])
+            prefix = component_prefix[comp.name]
+            emit_component_template(nta, comp, component_index[comp.name], prefix)
             sys_inst.append(f"P_{comp.name} = {comp.name}();")
             if getattr(comp, "deadline", None) is not None:
                 deadline_comps.append(comp.name)
@@ -119,14 +151,18 @@ class ModelBuilder:
         # ------------------------------------------------------------------
         # Scheduler instance (fixed-priority dispatcher)
         # ------------------------------------------------------------------
-        if components:
+        for prefix, data in group_data.items():
+            comps: List[Component] = data["components"]  # type: ignore[assignment]
+            if not comps:
+                continue
+            prio_map: Dict[str, int] = data["prio_map"]  # type: ignore[assignment]
             sched_tpl = emit_scheduler_template(
                 nta,
-                components,
-                index_map,
-                priority_values,
+                comps,
+                prio_map,
+                prefix,
             )
-            sys_inst.append(f"S = {sched_tpl}();")
+            sys_inst.append(f"S_{prefix} = {sched_tpl}();")
 
         # ------------------------------------------------------------------
         # DSL PROPERTY clauses

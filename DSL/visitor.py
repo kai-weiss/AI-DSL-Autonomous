@@ -7,11 +7,14 @@ from datetime import timedelta
 class ASTBuilder(RoboticsVisitor):
     def __init__(self):
         self.model = Model()
+        self._vehicle_stack: list[str] = []
 
     # componentDecl : COMPONENT ID LBRACE componentBody RBRACE ;
     def visitComponentDecl(self, ctx: RoboticsParser.ComponentDeclContext):
         name = ctx.ID().getText()
         comp = Component(name)
+        if self._vehicle_stack:
+            comp.vehicle = self._vehicle_stack[-1]
         for attrCtx in ctx.componentBody().componentAttr():
             match attrCtx.start.type:
                 case RoboticsParser.PERIOD:
@@ -84,8 +87,12 @@ class ASTBuilder(RoboticsVisitor):
 
     # vehicleDecl : VEHICLE ID LBRACE componentDecl* RBRACE ;
     def visitVehicleDecl(self, ctx: RoboticsParser.VehicleDeclContext):
-        for comp in ctx.componentDecl():
-            self.visit(comp)
+        self._vehicle_stack.append(ctx.ID().getText())
+        try:
+            for comp in ctx.componentDecl():
+                self.visit(comp)
+        finally:
+            self._vehicle_stack.pop()
         return None
 
     # cpuDecl : CPU LBRACE cpuAttr* RBRACE ;

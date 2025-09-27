@@ -9,6 +9,7 @@ class Component:
     deadline: timedelta | None = None
     wcet: timedelta | None = None
     priority: int | None = None
+    vehicle: str | None = None
 
 
 @dataclass
