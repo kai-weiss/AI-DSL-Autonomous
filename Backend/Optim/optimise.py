@@ -9,7 +9,9 @@ from Backend.UPPAAL.UppaalVerifier import UppaalVerifier
 from DSL.parser import parse_source
 from DSL.visitor import ASTBuilder
 from DSL.metamodel import Model
-from Backend.Optim.Algo.NSGA2 import NSGAII, Individual
+from Backend.Optim.Algo.common import Individual
+from Backend.Optim.Algo.NSGA2 import NSGAII
+from Backend.Optim.Algo.SMSEMOA import SMSEMOA
 from Backend.Optim.model_ops import variable_bounds, apply_values, _enumerate_chains
 
 
@@ -238,7 +240,13 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
     return evaluate
 
 
-def main(path: str, generations: int = 500):
+ALGORITHMS = {
+    "nsga2": NSGAII,
+    "sms-emoa": SMSEMOA,
+}
+
+
+def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
     model = load_model(path)
     if not hasattr(model, "optimisation"):
         raise ValueError("Model has no OPTIMISATION block")
@@ -246,7 +254,15 @@ def main(path: str, generations: int = 500):
 
     evaluate = make_evaluator(model)
 
-    algo = NSGAII(bounds, evaluate, generations=generations)
+    algo_key = algorithm.lower()
+    if algo_key not in ALGORITHMS:
+        raise ValueError(
+            f"Unknown optimisation algorithm '{algorithm}'. "
+            f"Available options: {', '.join(sorted(ALGORITHMS))}"
+        )
+
+    algo_cls = ALGORITHMS[algo_key]
+    algo = algo_cls(bounds, evaluate, generations=generations)
     population = algo.run()
 
     obj_specs = [
@@ -287,6 +303,6 @@ def main(path: str, generations: int = 500):
 
 
 if __name__ == "__main__":
-    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl", generations=1)
+    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl", generations=10, algorithm="sms-emoa")
     # print(m)
     print("Best individual:", ind.values, ind.objectives)

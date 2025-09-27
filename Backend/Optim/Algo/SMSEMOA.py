@@ -5,14 +5,15 @@ import random
 
 from deap import base, creator, tools, algorithms
 from deap.tools import emo
+from deap.tools._hypervolume import hv
 
 from .common import Individual
 
-__all__ = ["NSGAII", "Individual"]
+__all__ = ["SMSEMOA"]
 
 
-class NSGAII:
-    """A thin wrapper around DEAP's NSGA-II implementation"""
+class SMSEMOA:
+    """A steady-state SMS-EMOA implementation built on top of DEAP"""
 
     def __init__(
         self,
@@ -77,31 +78,33 @@ class NSGAII:
             eta=20.0,
             indpb=1.0 / len(self.bounds),
         )
-        toolbox.register("select", tools.selNSGA2)
 
-        pop = toolbox.population(n=self.pop_size)
-        for ind in pop:
+        population = toolbox.population(n=self.pop_size)
+        for ind in population:
             ind.fitness.values = toolbox.evaluate(ind)
 
-        pop, _ = algorithms.eaMuPlusLambda(
-            pop,
-            toolbox,
-            mu=self.pop_size,
-            lambda_=self.pop_size,
-            cxpb=self.crossover_prob,
-            mutpb=self.mutation_prob,
-            ngen=self.generations,
-            verbose=False,
-        )
+        for _ in range(self.generations):
+            offspring = algorithms.varOr(
+                population,
+                toolbox,
+                lambda_=self.pop_size,
+                cxpb=self.crossover_prob,
+                mutpb=self.mutation_prob,
+            )
+            for ind in offspring:
+                ind.fitness.values = toolbox.evaluate(ind)
 
-        fronts = emo.sortNondominated(pop, len(pop))
+            population.extend(offspring)
+            population = self._reduce_population(population)
+
+        fronts = emo.sortNondominated(population, len(population))
         for rank, front in enumerate(fronts):
             emo.assignCrowdingDist(front)
             for ind in front:
                 ind.rank = rank
 
         result: List[Individual] = []
-        for deap_ind in pop:
+        for deap_ind in population:
             values = {n: v for n, v in zip(self.names, deap_ind)}
             result.append(
                 Individual(
@@ -112,3 +115,55 @@ class NSGAII:
                 )
             )
         return result
+
+    # ------------------------------------------------------------------
+    def _reduce_population(self, population: List[creator.Ind]) -> List[creator.Ind]:
+        fronts = emo.sortNondominated(population, len(population))
+        new_population: List[creator.Ind] = []
+        for front in fronts:
+            if len(new_population) + len(front) <= self.pop_size:
+                new_population.extend(front)
+                continue
+
+            remaining = self.pop_size - len(new_population)
+            truncated = self._truncate_front(list(front), remaining, population)
+            new_population.extend(truncated)
+            break
+
+        return new_population
+
+    def _truncate_front(
+        self,
+        front: List[creator.Ind],
+        target_size: int,
+        population: List[creator.Ind],
+    ) -> List[creator.Ind]:
+        if target_size <= 0:
+            return []
+
+        while len(front) > target_size:
+            ref_point = self._reference_point(population)
+            contributions = self._hypervolume_contributions(front, ref_point)
+            worst_index = contributions.index(min(contributions))
+            front.pop(worst_index)
+
+        return front
+
+    def _reference_point(self, population: List[creator.Ind]) -> List[float]:
+        ref = [float("-inf")] * self.num_objectives
+        for ind in population:
+            for idx, value in enumerate(ind.fitness.values):
+                ref[idx] = max(ref[idx], value)
+        return [value + 1.0 for value in ref]
+
+    def _hypervolume_contributions(
+        self, front: List[creator.Ind], ref_point: List[float]
+    ) -> List[float]:
+        points = [list(ind.fitness.values) for ind in front]
+        base_hv = hv.hypervolume(points, ref_point)
+        contributions: List[float] = []
+        for idx in range(len(front)):
+            reduced = points[:idx] + points[idx + 1 :]
+            reduced_hv = hv.hypervolume(reduced, ref_point) if reduced else 0.0
+            contributions.append(base_hv - reduced_hv)
+        return contributions

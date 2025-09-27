@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 
 from Backend.Optim.optimise import load_model, variable_bounds, make_evaluator
-from Backend.Optim.Algo.NSGA2 import NSGAII  # your GA
+from Backend.Optim.Algo.NSGA2 import NSGAII
+from Backend.Optim.Algo.SMSEMOA import SMSEMOA
 
 
 #  Pareto helper
@@ -50,7 +51,17 @@ def igd_plus(front: np.ndarray, ref_set: np.ndarray) -> float:
 #  Algorithm runners
 def run_nsga2(bounds, evaluate, generations, pop_size, seed):
     alg = NSGAII(bounds, evaluate,
-                 generations=generations)
+                 generations=generations,
+                 pop_size=pop_size)
+    pop = alg.run()
+    objs = [ind.objectives for ind in pop]
+    return nondominated(objs).tolist()
+
+
+def run_sms_emoa(bounds, evaluate, generations, pop_size, seed):
+    alg = SMSEMOA(bounds, evaluate,
+                  generations=generations,
+                  pop_size=pop_size)
     pop = alg.run()
     objs = [ind.objectives for ind in pop]
     return nondominated(objs).tolist()
@@ -67,6 +78,7 @@ def random_search(bounds, evaluate, budget, seed):
 
 ALGORITHMS = {
     "nsga2": (run_nsga2, True),
+    "sms-emoa": (run_sms_emoa, True),
     "random_search": (random_search, False),
 }
 
@@ -107,9 +119,9 @@ def evaluate_algorithm(key: str, dsl: str, runs: int, gens: int, pop: int
 
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl"
-    algs = 'nsga2', 'random_search'
+    algs = 'sms-emoa', 'nsga2', 'random_search'
     runs = 2
-    generations = 4
+    generations = 8
     pop = 20
 
     summary_rows = []
