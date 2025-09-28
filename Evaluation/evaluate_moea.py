@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import itertools
 import math
+import os
 import random
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from threading import Lock
+from typing import Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -14,6 +16,7 @@ import pandas as pd
 from Backend.Optim.optimise import load_model, variable_bounds, make_evaluator
 from Backend.Optim.Algo.NSGA2 import NSGAII
 from Backend.Optim.Algo.SMSEMOA import SMSEMOA
+from Backend.Optim.Algo.common import PlateauDetector
 
 
 #  Pareto helper
@@ -54,7 +57,7 @@ def igd_plus(front: np.ndarray, ref_set: np.ndarray) -> float:
 
 
 #  Algorithm runners
-def run_nsga2(bounds, evaluate, generations, pop_size, seed):
+def run_nsga2(bounds, evaluate, generations, pop_size, seed, *, workers=None, plateau=None):
     random.seed(seed)
     np.random.seed(seed)
     alg = NSGAII(
@@ -62,15 +65,18 @@ def run_nsga2(bounds, evaluate, generations, pop_size, seed):
         evaluate,
         generations=generations,
         pop_size=pop_size,
+        workers=workers,
     )
-    pop, history, evaluations = alg.run(log_history=True)
+    pop, history, evaluations, stopped = alg.run(
+        log_history=True, plateau_detector=plateau
+    )
     objs = [ind.objectives for ind in pop]
     final_front = nondominated(objs)
     history_fronts = [np.asarray(h, dtype=float) for h in history]
-    return final_front, history_fronts, evaluations
+    return final_front, history_fronts, evaluations, stopped
 
 
-def run_sms_emoa(bounds, evaluate, generations, pop_size, seed):
+def run_sms_emoa(bounds, evaluate, generations, pop_size, seed, *, workers=None, plateau=None):
     random.seed(seed)
     np.random.seed(seed)
     alg = SMSEMOA(
@@ -78,26 +84,34 @@ def run_sms_emoa(bounds, evaluate, generations, pop_size, seed):
         evaluate,
         generations=generations,
         pop_size=pop_size,
+        workers=workers,
     )
-    pop, history, evaluations = alg.run(log_history=True)
+    pop, history, evaluations, stopped = alg.run(
+        log_history=True, plateau_detector=plateau
+    )
     objs = [ind.objectives for ind in pop]
     final_front = nondominated(objs)
     history_fronts = [np.asarray(h, dtype=float) for h in history]
-    return final_front, history_fronts, evaluations
+    return final_front, history_fronts, evaluations, stopped
 
 
-def random_search(bounds, evaluate, budget, seed, generations, pop_size):
+def random_search(bounds, evaluate, budget, seed, generations, pop_size, *, plateau=None):
     rnd = random.Random(seed)
     objs: List[List[float]] = []
     history: List[np.ndarray] = []
+    stopped_early = False
     for idx in range(budget):
         point = {k: rnd.uniform(lo, hi) for k, (lo, hi) in bounds.items()}
         objs.append(evaluate(point))
         if (idx + 1) % pop_size == 0:
-            history.append(nondominated(objs).copy())
+            front = nondominated(objs).copy()
+            history.append(front)
+            if plateau and plateau.update(front.tolist(), len(history)):
+                stopped_early = True
+                break
     final_front = nondominated(objs)
     history_fronts = [np.asarray(front, dtype=float) for front in history]
-    return final_front, history_fronts, budget
+    return final_front, history_fronts, len(objs), stopped_early
 
 
 ALGORITHMS = {
@@ -105,6 +119,50 @@ ALGORITHMS = {
     "sms-emoa": (run_sms_emoa, True),
     "random_search": (random_search, False),
 }
+
+PLATEAU_WINDOW = 15
+PLATEAU_EPSILON = 1e-4
+
+
+class MemoisedEvaluator:
+    """Thread-safe memoisation wrapper around the expensive objective call."""
+
+    def __init__(self, evaluate, names: Iterable[str]):
+        self._evaluate = evaluate
+        self._names = tuple(names)
+        self._cache: Dict[Tuple[float, ...], Tuple[float, ...]] = {}
+        self._lock = Lock()
+        self._hits = 0
+        self._misses = 0
+
+    def __call__(self, values: Dict[str, float]):
+        key = tuple(float(values[name]) for name in self._names)
+        with self._lock:
+            cached = self._cache.get(key)
+            if cached is not None:
+                self._hits += 1
+                return cached
+
+        result = tuple(float(v) for v in self._evaluate(dict(values)))
+
+        with self._lock:
+            # Another thread might have populated the cache while we were evaluating.
+            cached = self._cache.get(key)
+            if cached is not None:
+                self._hits += 1
+                return cached
+
+            self._cache[key] = result
+            self._misses += 1
+            return result
+
+    def stats(self) -> Dict[str, int]:
+        with self._lock:
+            return {
+                "hits": self._hits,
+                "misses": self._misses,
+                "entries": len(self._cache),
+            }
 
 
 def _min_max_params(ref_set: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -121,12 +179,12 @@ def _normalise(points: np.ndarray, mins: np.ndarray, ranges: np.ndarray) -> np.n
 
 
 def bootstrap_ci(
-    values: np.ndarray,
-    *,
-    func=np.median,
-    alpha: float = 0.05,
-    n_boot: int = 2000,
-    rng: np.random.Generator | None = None,
+        values: np.ndarray,
+        *,
+        func=np.median,
+        alpha: float = 0.05,
+        n_boot: int = 2000,
+        rng: np.random.Generator | None = None,
 ) -> Tuple[float, float]:
     if values.size == 0:
         return float("nan"), float("nan")
@@ -155,7 +213,7 @@ def _rankdata(values: np.ndarray) -> np.ndarray:
         while j + 1 < len(values) and values[order[j]] == values[order[j + 1]]:
             j += 1
         rank = 0.5 * (i + j) + 1.0
-        ranks[order[i : j + 1]] = rank
+        ranks[order[i: j + 1]] = rank
         i = j + 1
     return ranks
 
@@ -187,27 +245,68 @@ def wilcoxon_signed_rank(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     return statistic, max(0.0, min(1.0, p_value))
 
 
+def _memoised_evaluator(evaluate, names):
+    cache: Dict[Tuple[float, ...], Tuple[float, ...]] = {}
+    lock = Lock()
+
+    def wrapper(values: Dict[str, float]):
+        key = tuple(float(values[name]) for name in names)
+        with lock:
+            cached = cache.get(key)
+        if cached is not None:
+            return cached
+        result = tuple(float(v) for v in evaluate(dict(values)))
+        with lock:
+            cache[key] = result
+        return result
+
+    return wrapper
+
+
 def evaluate_algorithm(
     key: str,
-    dsl: str,
+    bounds: Dict[str, Tuple[float, float]],
+    evaluator: MemoisedEvaluator,
     runs: int,
     gens: int,
     pop: int,
+    *,
+    worker_threads: int | None = None,
 ):
     runner, has_gens = ALGORITHMS[key]
-    mdl = load_model(dsl)
-    bounds = variable_bounds(mdl.optimisation.variables)
-    evaluator = make_evaluator(mdl)
+
+    sample = {n: (lo + hi) / 2 for n, (lo, hi) in bounds.items()}
+    objectives = evaluator(sample)
+    num_objectives = len(objectives)
 
     run_records = []
     for r in range(runs):
         seed = 17 + r
         budget = gens * pop
         start = time.perf_counter()
+        plateau = None
+        if num_objectives == 2:
+            plateau = PlateauDetector(epsilon=PLATEAU_EPSILON, window=PLATEAU_WINDOW)
         if has_gens:
-            front, history, evaluations = runner(bounds, evaluator, gens, pop, seed)
+            front, history, evaluations, stopped = runner(
+                bounds,
+                evaluator,
+                gens,
+                pop,
+                seed,
+                workers=worker_threads,
+                plateau=plateau,
+            )
         else:
-            front, history, evaluations = runner(bounds, evaluator, budget, seed, gens, pop)
+            front, history, evaluations, stopped = runner(
+                bounds,
+                evaluator,
+                budget,
+                seed,
+                gens,
+                pop,
+                plateau=plateau,
+            )
         runtime = time.perf_counter() - start
         front = np.asarray(front, dtype=float)
         history = [np.asarray(h, dtype=float) for h in history]
@@ -220,6 +319,8 @@ def evaluate_algorithm(
                 "history": history,
                 "runtime": runtime,
                 "evaluations": evaluations,
+                "stopped_early": stopped,
+                "generations_completed": len(history),
             }
         )
 
@@ -235,20 +336,31 @@ def main():
     runs = 10
     generations = 80
     pop = 60
+    worker_threads = os.cpu_count() or 1
+    print(os.cpu_count())
+
+    model = load_model(dsl)
+    bounds = variable_bounds(model.optimisation.variables)
+    base_evaluator = make_evaluator(model)
+    evaluator = MemoisedEvaluator(base_evaluator, bounds.keys())
 
     results = {}
     all_fronts: List[np.ndarray] = []
     for alg in algorithms:
         if alg not in ALGORITHMS:
             raise ValueError(f"Unknown algorithm '{alg}'")
-        data = evaluate_algorithm(alg, dsl, runs, generations, pop)
+        data = evaluate_algorithm(
+            alg,
+            bounds,
+            evaluator,
+            runs,
+            generations,
+            pop,
+            worker_threads=worker_threads,
+        )
         results[alg] = data
         for rec in data["runs"]:
             all_fronts.append(rec["front"])
-
-    if not all_fronts:
-        print("No successful runs recorded.")
-        return
 
     ref_set = nondominated(np.vstack(all_fronts))
     ref_point = np.max(ref_set, axis=0) * 1.1
@@ -274,6 +386,8 @@ def main():
                     "IGD+": igd_value,
                     "runtime_s": rec["runtime"],
                     "evaluations": rec["evaluations"],
+                    "generations": rec["generations_completed"],
+                    "stopped_early": rec["stopped_early"],
                 }
             )
 
@@ -368,6 +482,13 @@ def main():
         tests_df = pd.DataFrame(test_rows)
         print("\n=== Wilcoxon signed-rank tests ===")
         print(tests_df.to_markdown(index=False, floatfmt=".4g"))
+
+    cache_stats = evaluator.stats()
+    print(
+        "\nMemoised evaluator cache: "
+        f"{cache_stats['hits']} hits / {cache_stats['misses']} misses "
+        f"({cache_stats['entries']} unique assignments)"
+    )
 
 
 if __name__ == "__main__":
