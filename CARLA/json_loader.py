@@ -258,9 +258,19 @@ def _vehicle_from_payload(
         metadata = {
             str(k): v
             for k, v in payload.items()
-            if k not in {"name", "components", "blueprint", "autopilot", "spawn_point"}
+            if k
+            not in {
+                "name",
+                "components",
+                "blueprint",
+                "autopilot",
+                "spawn_point",
+                "spawn",
+            }
         }
-        spawn_spec = _parse_spawn_point(payload.get("spawn_point"))
+        spawn_spec = _parse_spawn_point(
+            payload.get("spawn_point") if "spawn_point" in payload else payload.get("spawn")
+        )
 
     # Merge in components that reference this vehicle by name
     if not component_names:
@@ -303,7 +313,7 @@ def _assign_vehicle_property(vehicle: VehicleSpec, key: str, value: Any) -> None
         vehicle.blueprint = str(value)
     elif key_lower == "autopilot":
         vehicle.autopilot = _parse_bool(value)
-    elif key_lower == "spawn_point":
+    elif key_lower in {"spawn_point", "spawn"}:
         vehicle.spawn = _parse_spawn_point(value)
     else:
         vehicle.metadata[key] = value
@@ -458,29 +468,52 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
             parsed = _parse_int(index_text)
             if parsed is not None:
                 return SpawnPointSpec(index=parsed)
-        parts = {}
+        if text.startswith("map_point:"):
+            map_point_text = text.split(":", 1)[1]
+            parsed = _parse_int(map_point_text)
+            if parsed is not None:
+                return SpawnPointSpec(map_point=parsed)
+        parts: Dict[str, float] = {}
+        int_parts: Dict[str, int] = {}
         for piece in text.split(","):
             if "=" not in piece:
                 continue
             key, raw = piece.split("=", 1)
+            key = key.strip().lower()
+            raw = raw.strip()
+            if key in {"index", "map_point"}:
+                parsed_int = _parse_int(raw)
+                if parsed_int is not None:
+                    int_parts[key] = parsed_int
+                continue
             parsed = _parse_float(raw)
             if parsed is not None:
-                parts[key.strip().lower()] = parsed
-        if parts:
-            loc = LocationSpec(
-                x=parts.get("x", 0.0),
-                y=parts.get("y", 0.0),
-                z=parts.get("z", 0.0),
+                parts[key] = parsed
+        if parts or int_parts:
+            loc = None
+            rot = None
+            if any(k in parts for k in {"x", "y", "z"}):
+                loc = LocationSpec(
+                    x=parts.get("x", 0.0),
+                    y=parts.get("y", 0.0),
+                    z=parts.get("z", 0.0),
+                )
+            if any(k in parts for k in {"pitch", "yaw", "roll"}):
+                rot = RotationSpec(
+                    pitch=parts.get("pitch", 0.0),
+                    yaw=parts.get("yaw", 0.0),
+                    roll=parts.get("roll", 0.0),
+                )
+            return SpawnPointSpec(
+                index=int_parts.get("index"),
+                map_point=int_parts.get("map_point"),
+                location=loc,
+                rotation=rot,
             )
-            rot = RotationSpec(
-                pitch=parts.get("pitch", 0.0),
-                yaw=parts.get("yaw", 0.0),
-                roll=parts.get("roll", 0.0),
-            )
-            return SpawnPointSpec(location=loc, rotation=rot)
         return None
     if isinstance(value, Mapping):
         index = _parse_int(value.get("index"))
+        map_point = _parse_int(value.get("map_point"))
         loc_val = value.get("location")
         rot_val = value.get("rotation")
         if isinstance(loc_val, Mapping):
@@ -499,7 +532,7 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
             )
         else:
             rot = None
-        if index is None and not loc and not rot:
+        if index is None and map_point is None and not loc and not rot:
             return None
-        return SpawnPointSpec(index=index, location=loc, rotation=rot)
+        return SpawnPointSpec(index=index, map_point=map_point, location=loc, rotation=rot)
     return None

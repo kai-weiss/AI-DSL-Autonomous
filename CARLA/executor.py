@@ -245,12 +245,15 @@ class CarlaScenarioExecutor:
         if spec is None:
             return map_spawn_points[0] if map_spawn_points else carla.Transform()
 
-        if spec.index is not None:
-            if 0 <= spec.index < len(map_spawn_points):
-                return map_spawn_points[spec.index]
+        target_index = spec.index if spec.index is not None else spec.map_point
+        if target_index is not None:
+            if 0 <= target_index < len(map_spawn_points):
+                return map_spawn_points[target_index]
+            label = "index" if spec.index is not None else "map_point"
             LOGGER.warning(
-                "Spawn index %s for vehicle out of range (available %d)",
-                spec.index,
+                "Spawn %s %s for vehicle out of range (available %d)",
+                label,
+                target_index,
                 len(map_spawn_points),
             )
 

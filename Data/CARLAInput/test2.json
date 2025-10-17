@@ -12,7 +12,7 @@
     "B": {
       "blueprint": "vehicle.lincoln.mkz",
       "autopilot": false,
-      "spawn": { "map_point": 46 },
+      "spawn": { "map_point": 47 },
       "components": [
         "Setup_B",
         "Perception_B",

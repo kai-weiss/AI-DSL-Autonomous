@@ -28,6 +28,7 @@ class SpawnPointSpec:
     """Spawn point expressed either as an index or an explicit transform."""
 
     index: int | None = None
+    map_point: int | None = None
     location: LocationSpec | None = None
     rotation: RotationSpec | None = None
 
