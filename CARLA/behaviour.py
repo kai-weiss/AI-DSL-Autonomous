@@ -15,6 +15,10 @@ LOGGER = logging.getLogger(__name__)
 _VEHICLE_REGISTRY_KEY = "_vehicle_actor_ids"
 _TRAFFIC_MANAGER_PORTS_KEY = "_traffic_manager_ports"
 _TRAFFIC_MANAGER_CACHE_KEY = "_traffic_manager_cache"
+_CARLA_CLIENT_KEY = "_carla_client"
+
+# Exported constant used by other modules when caching the CARLA client reference.
+CARLA_CLIENT_PROPERTY = _CARLA_CLIENT_KEY
 _OVERTAKE_STATE_KEY = "_overtake_state"
 _OVERTAKE_REQUEST_KEY = "overtake_request"
 _OVERTAKE_ACK_KEY = "permission_ack"
@@ -118,15 +122,8 @@ def _resolve_traffic_manager(context: ComponentContext, vehicle_name: str):
     if vehicle_name in registry:
         return registry[vehicle_name]
 
-    world = context.world
-    get_client = getattr(world, "get_client", None)
-    if not callable(get_client):
-        return None
-
-    try:
-        client = get_client()
-    except Exception:  # pragma: no cover - depends on CARLA API
-        LOGGER.exception("Failed to acquire CARLA client for traffic manager lookup")
+    client = _resolve_carla_client(context)
+    if client is None:
         return None
 
     tm_port = None
@@ -155,6 +152,29 @@ def _call_tm_method(traffic_manager: Any, method_name: str, *args: Any) -> bool:
     except Exception:  # pragma: no cover - depends on CARLA API
         LOGGER.exception("Traffic manager call '%s' failed", method_name)
         return False
+
+
+def _resolve_carla_client(context: ComponentContext) -> Any | None:
+    world = context.world
+    if world is not None:
+        get_client = getattr(world, "get_client", None)
+        if callable(get_client):
+            try:
+                return get_client()
+            except Exception:  # pragma: no cover - depends on CARLA API
+                LOGGER.exception("Failed to obtain CARLA client from world; traffic manager setup skipped")
+                return None
+
+    properties = getattr(context.scenario, "properties", None)
+    if isinstance(properties, dict):
+        client = properties.get(_CARLA_CLIENT_KEY)
+        if client is not None:
+            return client
+
+    if world is not None and not callable(getattr(world, "get_client", None)):
+        LOGGER.debug("World object does not expose a CARLA client; cannot configure traffic manager")
+
+    return None
 
 
 def _relative_state(reference_transform: Any, follower_transform: Any) -> Dict[str, float]:
@@ -283,16 +303,9 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
             LOGGER.debug("CARLA Python API is unavailable; skipping traffic manager setup")
             return
 
-        world = context.world
-        get_client = getattr(world, "get_client", None)
-        if not callable(get_client):
-            LOGGER.debug("World object does not expose a CARLA client; cannot configure traffic manager")
-            return
-
-        try:
-            client = get_client()
-        except Exception:  # pragma: no cover - depends on CARLA API
-            LOGGER.exception("Failed to obtain CARLA client from world; traffic manager setup skipped")
+        client = _resolve_carla_client(context)
+        if client is None:
+            LOGGER.debug("Unable to obtain CARLA client; traffic manager setup skipped")
             return
 
         tm_port = self._parse_int_config("tm_port") or self._parse_int_config("port")
@@ -450,7 +463,8 @@ class _PermissionRequestBehaviour(_BaseBehaviour):
         if not self._lead_vehicle:
             self._lead_vehicle = self._resolve_lead_vehicle(context)
             if not self._lead_vehicle and not self._carla_unavailable:
-                LOGGER.debug("No lead vehicle identified for overtaking request component '%s'", context.component_spec.name)
+                LOGGER.debug("No lead vehicle identified for overtaking request component '%s'",
+                             context.component_spec.name)
                 return
 
         if self._carla_unavailable:
@@ -476,7 +490,8 @@ class _PermissionRequestBehaviour(_BaseBehaviour):
         if longitudinal < 0.0 and abs(longitudinal) <= 15.0 and abs(lateral) <= 4.0:
             self._emit_request(context, metrics=metrics, reason="proximity_trigger")
 
-    def _emit_request(self, context: ComponentContext, *, metrics: Optional[Dict[str, float]] = None, reason: str) -> None:
+    def _emit_request(self, context: ComponentContext, *, metrics: Optional[Dict[str, float]] = None,
+                      reason: str) -> None:
         payload = {
             "from_vehicle": context.vehicle_spec.name,
             "to_vehicle": self._lead_vehicle,
@@ -518,6 +533,7 @@ class _PermissionRequestBehaviour(_BaseBehaviour):
             if vehicle.name != context.vehicle_spec.name:
                 return vehicle.name
         return None
+
 
 class _AckHandlerBehaviour(_BaseBehaviour):
     """Respond to a pending overtaking permission request."""

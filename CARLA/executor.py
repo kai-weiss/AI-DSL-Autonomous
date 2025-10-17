@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 from typing import Dict, Optional
 
-from .behaviour import BehaviourRegistry
+from .behaviour import BehaviourRegistry, CARLA_CLIENT_PROPERTY
 from .model import LocationSpec, RotationSpec, ScenarioSpec, SpawnPointSpec, VehicleSpec
 from .scheduler import Scheduler
 
@@ -50,6 +50,7 @@ class CarlaScenarioExecutor:
             return
 
         client = self._connect()
+        self._store_carla_client_reference(client)
         world = self._prepare_world(client)
         self._apply_weather(world)
 
@@ -79,6 +80,7 @@ class CarlaScenarioExecutor:
             self._original_settings = None
             self._spectator = None
             self._actors.clear()
+            self._clear_carla_client_reference()
 
     # ------------------------------------------------------------------
     # Execution loop
@@ -358,6 +360,16 @@ class CarlaScenarioExecutor:
             actor_registry = self.scenario.properties.get("_vehicle_actor_ids")
             if isinstance(actor_registry, dict):
                 actor_registry.clear()
+
+    def _store_carla_client_reference(self, client: object) -> None:
+        properties = getattr(self.scenario, "properties", None)
+        if isinstance(properties, dict):
+            properties[CARLA_CLIENT_PROPERTY] = client
+
+    def _clear_carla_client_reference(self) -> None:
+        properties = getattr(self.scenario, "properties", None)
+        if isinstance(properties, dict):
+            properties.pop(CARLA_CLIENT_PROPERTY, None)
 
     # ------------------------------------------------------------------
     # Spectator camera helpers
