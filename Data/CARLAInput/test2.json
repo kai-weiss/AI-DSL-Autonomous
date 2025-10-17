@@ -4,13 +4,13 @@
 
   "vehicles": {
     "A": {
-      "blueprint": "vehicle.lincoln.mkz",
+      "blueprint": "vehicle.fuso.mitsubishi",
       "autopilot": false,
       "spawn": { "map_point": 50 },
       "components": ["Setup_A", "Perception_A", "AckHandler_A"]
     },
     "B": {
-      "blueprint": "vehicle.lincoln.mkz",
+      "blueprint": "vehicle.fuso.mitsubishi",
       "autopilot": false,
       "spawn": { "map_point": 48 },
       "components": [
