@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Protocol, TYPE_CHECKING
+from typing import Any, Callable, Dict, Iterable, Optional, Protocol, TYPE_CHECKING
 
 from .model import ComponentSpec, VehicleSpec
 
@@ -10,6 +11,13 @@ if TYPE_CHECKING:  # pragma: no cover - type checking only
     import carla
 
 LOGGER = logging.getLogger(__name__)
+
+_VEHICLE_REGISTRY_KEY = "_vehicle_actor_ids"
+_TRAFFIC_MANAGER_PORTS_KEY = "_traffic_manager_ports"
+_TRAFFIC_MANAGER_CACHE_KEY = "_traffic_manager_cache"
+_OVERTAKE_STATE_KEY = "_overtake_state"
+_OVERTAKE_REQUEST_KEY = "overtake_request"
+_OVERTAKE_ACK_KEY = "permission_ack"
 
 
 @dataclass(slots=True)
@@ -37,6 +45,147 @@ class ComponentBehaviour(Protocol):
 
 
 BehaviourFactory = Callable[[ComponentSpec, VehicleSpec], ComponentBehaviour]
+
+
+def _component_full_name(component: ComponentSpec) -> str:
+    if component.vehicle:
+        return f"{component.vehicle}.{component.name}"
+    return component.name
+
+
+def _timedelta_to_seconds(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value.total_seconds())
+    except AttributeError:
+        return None
+
+
+def _ensure_overtake_state(context: ComponentContext) -> Dict[str, Any]:
+    state = context.scenario.properties.setdefault(_OVERTAKE_STATE_KEY, {})
+    if "phase" not in state:
+        state["phase"] = "idle"
+    return state
+
+
+def _vehicle_actor_id(context: ComponentContext, vehicle_name: str) -> Optional[int]:
+    registry = context.scenario.properties.get(_VEHICLE_REGISTRY_KEY)
+    if not isinstance(registry, dict):
+        return None
+    actor_id = registry.get(vehicle_name)
+    if actor_id is None:
+        return None
+    try:
+        return int(actor_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_vehicle_actor(context: ComponentContext, vehicle_name: str):
+    actor_id = _vehicle_actor_id(context, vehicle_name)
+    if actor_id is None:
+        return None
+    world = context.world
+    if world is None:
+        return None
+    get_actor = getattr(world, "get_actor", None)
+    if not callable(get_actor):
+        return None
+    try:
+        return get_actor(actor_id)
+    except Exception:  # pragma: no cover - depends on CARLA API
+        LOGGER.exception("Failed to resolve CARLA actor for vehicle '%s'", vehicle_name)
+        return None
+
+
+def _traffic_manager_registry(context: ComponentContext) -> Dict[str, Any]:
+    registry = context.scenario.properties.setdefault(_TRAFFIC_MANAGER_CACHE_KEY, {})
+    if not isinstance(registry, dict):
+        registry = {}
+        context.scenario.properties[_TRAFFIC_MANAGER_CACHE_KEY] = registry
+    return registry
+
+
+def _store_traffic_manager_port(context: ComponentContext, vehicle_name: str, port: Optional[int]) -> None:
+    ports = context.scenario.properties.setdefault(_TRAFFIC_MANAGER_PORTS_KEY, {})
+    if isinstance(ports, dict):
+        ports[vehicle_name] = port
+
+
+def _resolve_traffic_manager(context: ComponentContext, vehicle_name: str):
+    registry = _traffic_manager_registry(context)
+    if vehicle_name in registry:
+        return registry[vehicle_name]
+
+    world = context.world
+    get_client = getattr(world, "get_client", None)
+    if not callable(get_client):
+        return None
+
+    try:
+        client = get_client()
+    except Exception:  # pragma: no cover - depends on CARLA API
+        LOGGER.exception("Failed to acquire CARLA client for traffic manager lookup")
+        return None
+
+    tm_port = None
+    ports = context.scenario.properties.get(_TRAFFIC_MANAGER_PORTS_KEY)
+    if isinstance(ports, dict):
+        tm_port = ports.get(vehicle_name)
+
+    try:
+        traffic_manager = client.get_trafficmanager(tm_port) if tm_port else client.get_trafficmanager()
+    except Exception:  # pragma: no cover - depends on CARLA API
+        LOGGER.exception("Unable to resolve traffic manager for vehicle '%s'", vehicle_name)
+        return None
+
+    registry[vehicle_name] = traffic_manager
+    return traffic_manager
+
+
+def _call_tm_method(traffic_manager: Any, method_name: str, *args: Any) -> bool:
+    method = getattr(traffic_manager, method_name, None)
+    if not callable(method):
+        LOGGER.debug("Traffic manager has no method '%s'", method_name)
+        return False
+    try:
+        method(*args)
+        return True
+    except Exception:  # pragma: no cover - depends on CARLA API
+        LOGGER.exception("Traffic manager call '%s' failed", method_name)
+        return False
+
+
+def _relative_state(reference_transform: Any, follower_transform: Any) -> Dict[str, float]:
+    yaw_rad = math.radians(reference_transform.rotation.yaw)
+    forward_x = math.cos(yaw_rad)
+    forward_y = math.sin(yaw_rad)
+    right_x = -forward_y
+    right_y = forward_x
+
+    dx = follower_transform.location.x - reference_transform.location.x
+    dy = follower_transform.location.y - reference_transform.location.y
+
+    longitudinal = dx * forward_x + dy * forward_y
+    lateral = dx * right_x + dy * right_y
+    distance = math.hypot(dx, dy)
+
+    return {"longitudinal": longitudinal, "lateral": lateral, "distance": distance}
+
+
+def _connections_by_src(component: ComponentSpec, scenario: Any) -> Iterable[Any]:
+    full_name = _component_full_name(component)
+    for connection in getattr(scenario, "connections", []):
+        if getattr(connection, "src", None) == full_name:
+            yield connection
+
+
+def _connections_by_dst(component: ComponentSpec, scenario: Any) -> Iterable[Any]:
+    full_name = _component_full_name(component)
+    for connection in getattr(scenario, "connections", []):
+        if getattr(connection, "dst", None) == full_name:
+            yield connection
 
 
 class BehaviourRegistry:
@@ -83,7 +232,8 @@ class _NoOpBehaviour(_BaseBehaviour):
     """Behaviour that performs no action."""
 
     def setup(self, context: ComponentContext) -> None:
-        LOGGER.debug("Component '%s' on vehicle '%s' has no runtime behaviour", context.component_spec.name, context.vehicle_spec.name)
+        LOGGER.debug("Component '%s' on vehicle '%s' has no runtime behaviour", context.component_spec.name,
+                     context.vehicle_spec.name)
 
 
 class _AutopilotBehaviour(_BaseBehaviour):
@@ -117,7 +267,7 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
 
     @classmethod
     def from_specs(
-        cls, component: ComponentSpec, vehicle: VehicleSpec
+            cls, component: ComponentSpec, vehicle: VehicleSpec
     ) -> "_TrafficManagerAutopilotBehaviour":
         return cls(component.config)
 
@@ -159,6 +309,14 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
         if traffic_manager is None:
             LOGGER.debug("CARLA traffic manager not available; skipping configuration")
             return
+
+        try:
+            port = traffic_manager.get_port()  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - depends on CARLA API
+            port = tm_port
+        _store_traffic_manager_port(context, context.vehicle_spec.name, port)
+        registry = _traffic_manager_registry(context)
+        registry[context.vehicle_spec.name] = traffic_manager
 
         self._apply_tm_configuration(traffic_manager, actor)
 
@@ -224,35 +382,204 @@ class _PermissionRequestBehaviour(_BaseBehaviour):
     """Simulate the transmission of an overtaking permission request."""
 
     def __init__(self) -> None:
-        self._requested = False
+        self._request_active = False
+        self._lead_vehicle: Optional[str] = None
+        self._latency_budgets: Dict[str, Optional[float]] = {}
+        self._cooldown_remaining = 0.0
+        self._carla_unavailable = False
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' ready to issue overtaking request", context.vehicle_spec.name)
 
-    def tick(self, context: ComponentContext, dt: float) -> None:
-        if self._requested:
-            return
-        context.scenario.properties["overtake_request"] = "pending"
-        self._requested = True
-        LOGGER.info("Vehicle '%s' requested overtaking permission", context.vehicle_spec.name)
+        self._lead_vehicle = self._lead_vehicle or self._resolve_lead_vehicle(context)
+        self._latency_budgets = {
+            connection.name: _timedelta_to_seconds(connection.latency_budget)
+            for connection in _connections_by_src(context.component_spec, context.scenario)
+        }
 
+        state = _ensure_overtake_state(context)
+        if self._lead_vehicle:
+            state.setdefault("lead_vehicle", self._lead_vehicle)
+        state.setdefault("overtaker", context.vehicle_spec.name)
+
+        actor = context.actor
+        traffic_manager = _resolve_traffic_manager(context, context.vehicle_spec.name)
+        if traffic_manager is not None and actor is not None:
+            if _call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -35.0):
+                LOGGER.info(
+                    "Configured vehicle '%s' for fast approach (speed offset -35%%)",
+                    context.vehicle_spec.name,
+                )
+        elif actor is None:
+            LOGGER.debug(
+                "Vehicle '%s' has no CARLA actor bound; overtaking logic will rely on scenario state only",
+                context.vehicle_spec.name,
+            )
+        else:
+            try:
+                import carla  # type: ignore
+            except ModuleNotFoundError:
+                self._carla_unavailable = True
+                LOGGER.debug(
+                    "CARLA API unavailable; overtaking request will rely on logical triggers only",
+                )
+            else:  # pragma: no cover - depends on CARLA API
+                try:
+                    actor.set_autopilot(True)
+                except Exception:
+                    LOGGER.exception("Failed to ensure autopilot for vehicle '%s'", context.vehicle_spec.name)
+
+    def tick(self, context: ComponentContext, dt: float) -> None:
+        state = _ensure_overtake_state(context)
+
+        if state.get("phase") == "idle":
+            cooldown = max(state.get("cooldown", 0.0) or 0.0, 0.0)
+            if cooldown > 0.0:
+                cooldown = max(0.0, cooldown - dt)
+                state["cooldown"] = cooldown
+                self._cooldown_remaining = cooldown
+                return
+            self._request_active = False
+            self._cooldown_remaining = 0.0
+        else:
+            self._cooldown_remaining = state.get("cooldown", self._cooldown_remaining)
+
+        if self._request_active or state.get("phase") != "idle":
+            return
+
+        if not self._lead_vehicle:
+            self._lead_vehicle = self._resolve_lead_vehicle(context)
+            if not self._lead_vehicle and not self._carla_unavailable:
+                LOGGER.debug("No lead vehicle identified for overtaking request component '%s'", context.component_spec.name)
+                return
+
+        if self._carla_unavailable:
+            self._emit_request(context, reason="carla_unavailable")
+            return
+
+        actor = context.actor
+        lead_actor = _resolve_vehicle_actor(context, self._lead_vehicle) if self._lead_vehicle else None
+        if actor is None or lead_actor is None:
+            return
+
+        try:
+            follower_transform = actor.get_transform()
+            leader_transform = lead_actor.get_transform()
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Failed to evaluate vehicle transforms during overtaking trigger check")
+            return
+
+        metrics = _relative_state(leader_transform, follower_transform)
+        longitudinal = metrics["longitudinal"]
+        lateral = metrics["lateral"]
+
+        if longitudinal < 0.0 and abs(longitudinal) <= 15.0 and abs(lateral) <= 4.0:
+            self._emit_request(context, metrics=metrics, reason="proximity_trigger")
+
+    def _emit_request(self, context: ComponentContext, *, metrics: Optional[Dict[str, float]] = None, reason: str) -> None:
+        payload = {
+            "from_vehicle": context.vehicle_spec.name,
+            "to_vehicle": self._lead_vehicle,
+            "component": context.component_spec.name,
+            "period_s": _timedelta_to_seconds(context.component_spec.period),
+            "wcet_s": _timedelta_to_seconds(context.component_spec.wcet),
+            "deadline_s": _timedelta_to_seconds(context.component_spec.deadline),
+            "priority": context.component_spec.priority,
+            "link_budgets_s": dict(self._latency_budgets),
+            "reason": reason,
+        }
+        if metrics:
+            payload["relative_pose"] = metrics
+
+        context.scenario.properties[_OVERTAKE_REQUEST_KEY] = payload
+
+        state = _ensure_overtake_state(context)
+        state["phase"] = "awaiting_ack"
+        state["lead_vehicle"] = self._lead_vehicle
+        state["overtaker"] = context.vehicle_spec.name
+        state.pop("cooldown", None)
+        state["request_count"] = int(state.get("request_count", 0)) + 1
+
+        self._request_active = True
+        LOGGER.info(
+            "Vehicle '%s' requested overtaking permission from '%s' (%s)",
+            context.vehicle_spec.name,
+            self._lead_vehicle,
+            reason,
+        )
+
+    def _resolve_lead_vehicle(self, context: ComponentContext) -> Optional[str]:
+        for connection in _connections_by_src(context.component_spec, context.scenario):
+            target = getattr(connection, "dst", "")
+            if target and "." in target:
+                return target.split(".", 1)[0]
+
+        for vehicle in getattr(context.scenario, "vehicles", []):
+            if vehicle.name != context.vehicle_spec.name:
+                return vehicle.name
+        return None
 
 class _AckHandlerBehaviour(_BaseBehaviour):
     """Respond to a pending overtaking permission request."""
 
     def __init__(self) -> None:
         self._acknowledged = False
+        self._latency_budgets: Dict[str, Optional[float]] = {}
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' ready to handle overtaking acknowledgements", context.vehicle_spec.name)
+        self._latency_budgets = {
+            connection.name: _timedelta_to_seconds(connection.latency_budget)
+            for connection in _connections_by_src(context.component_spec, context.scenario)
+        }
+
+        actor = context.actor
+        traffic_manager = _resolve_traffic_manager(context, context.vehicle_spec.name)
+        if traffic_manager is not None and actor is not None:
+            if _call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, 45.0):
+                LOGGER.info(
+                    "Configured vehicle '%s' as slow lead (speed offset +45%%)",
+                    context.vehicle_spec.name,
+                )
 
     def tick(self, context: ComponentContext, dt: float) -> None:
+        state = _ensure_overtake_state(context)
+
+        if state.get("phase") == "idle":
+            self._acknowledged = False
+            return
+
         if self._acknowledged:
             return
-        if context.scenario.properties.get("overtake_request") == "pending":
-            context.scenario.properties["permission_ack"] = "granted"
-            self._acknowledged = True
-            LOGGER.info("Vehicle '%s' granted overtaking permission", context.vehicle_spec.name)
+
+        request = context.scenario.properties.get(_OVERTAKE_REQUEST_KEY)
+        if not isinstance(request, dict):
+            return
+
+        if request.get("to_vehicle") not in {None, context.vehicle_spec.name}:
+            return
+
+        ack_payload = {
+            "from_vehicle": context.vehicle_spec.name,
+            "to_vehicle": request.get("from_vehicle"),
+            "component": context.component_spec.name,
+            "period_s": _timedelta_to_seconds(context.component_spec.period),
+            "wcet_s": _timedelta_to_seconds(context.component_spec.wcet),
+            "deadline_s": _timedelta_to_seconds(context.component_spec.deadline),
+            "priority": context.component_spec.priority,
+            "link_budgets_s": dict(self._latency_budgets),
+            "request": request,
+        }
+
+        context.scenario.properties[_OVERTAKE_ACK_KEY] = ack_payload
+        state["phase"] = "acknowledged"
+        state["ack_count"] = int(state.get("ack_count", 0)) + 1
+        self._acknowledged = True
+        LOGGER.info(
+            "Vehicle '%s' granted overtaking permission to '%s'",
+            context.vehicle_spec.name,
+            request.get("from_vehicle"),
+        )
 
 
 class _OvertakeOnAckBehaviour(_BaseBehaviour):
@@ -260,16 +587,187 @@ class _OvertakeOnAckBehaviour(_BaseBehaviour):
 
     def __init__(self) -> None:
         self._started = False
+        self._lead_vehicle: Optional[str] = None
+        self._elapsed = 0.0
+        self._lane_change_requested = False
+        self._return_requested = False
+        self._manual_control = False
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' waiting for overtaking permission", context.vehicle_spec.name)
 
+        state = _ensure_overtake_state(context)
+        state.setdefault("overtaker", context.vehicle_spec.name)
+
+        self._lead_vehicle = self._lead_vehicle or state.get("lead_vehicle")
+
     def tick(self, context: ComponentContext, dt: float) -> None:
-        if self._started:
+        state = _ensure_overtake_state(context)
+
+        if state.get("phase") == "idle":
+            self._reset_cycle()
             return
-        if context.scenario.properties.get("permission_ack") == "granted":
-            self._started = True
-            LOGGER.info("Vehicle '%s' initiating overtake manoeuvre", context.vehicle_spec.name)
+
+        ack_payload = context.scenario.properties.get(_OVERTAKE_ACK_KEY)
+        if not isinstance(ack_payload, dict):
+            return
+
+        if ack_payload.get("to_vehicle") not in {None, context.vehicle_spec.name}:
+            return
+
+        if not self._started:
+            self._begin_overtake(context, ack_payload)
+
+        if self._started:
+            self._update_overtake(context, dt)
+
+    def _begin_overtake(self, context: ComponentContext, ack_payload: Dict[str, Any]) -> None:
+        actor = context.actor
+        if actor is None:
+            LOGGER.debug("No actor bound to overtaking vehicle '%s'", context.vehicle_spec.name)
+            return
+
+        self._lead_vehicle = ack_payload.get("from_vehicle") or self._lead_vehicle
+        traffic_manager = _resolve_traffic_manager(context, context.vehicle_spec.name)
+
+        if traffic_manager is not None:
+            _call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0)
+        else:
+            self._manual_control = True
+            try:  # pragma: no cover - depends on CARLA API
+                actor.set_autopilot(False)
+            except Exception:
+                LOGGER.exception("Unable to disable autopilot for manual overtake control")
+
+        state = _ensure_overtake_state(context)
+        state["phase"] = "executing"
+        state["lead_vehicle"] = self._lead_vehicle
+        self._started = True
+        self._elapsed = 0.0
+        self._lane_change_requested = False
+        self._return_requested = False
+
+        LOGGER.info(
+            "Vehicle '%s' initiating overtake of '%s'",
+            context.vehicle_spec.name,
+            self._lead_vehicle,
+        )
+
+    def _update_overtake(self, context: ComponentContext, dt: float) -> None:
+        actor = context.actor
+        if actor is None:
+            LOGGER.debug("Overtaking vehicle '%s' lost actor reference", context.vehicle_spec.name)
+            self._finish_overtake(context, force=True)
+            return
+
+        lead_actor = _resolve_vehicle_actor(context, self._lead_vehicle) if self._lead_vehicle else None
+
+        try:
+            follower_transform = actor.get_transform()
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Failed to obtain transform for overtaking vehicle")
+            self._finish_overtake(context, force=True)
+            return
+
+        metrics = None
+        if lead_actor is not None:
+            try:
+                leader_transform = lead_actor.get_transform()
+                metrics = _relative_state(leader_transform, follower_transform)
+            except Exception:  # pragma: no cover - depends on CARLA API
+                LOGGER.exception("Failed to obtain transform for lead vehicle '%s'", self._lead_vehicle)
+
+        traffic_manager = _resolve_traffic_manager(context, context.vehicle_spec.name)
+
+        if traffic_manager is not None:
+            if not self._lane_change_requested:
+                if _call_tm_method(traffic_manager, "force_lane_change", actor, True):
+                    self._lane_change_requested = True
+                    LOGGER.info("Vehicle '%s' requested lane change to begin overtaking", context.vehicle_spec.name)
+            _call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0)
+
+            if metrics and not self._return_requested and metrics["longitudinal"] > 8.0:
+                if _call_tm_method(traffic_manager, "force_lane_change", actor, False):
+                    self._return_requested = True
+                    LOGGER.info("Vehicle '%s' requested return to lane after passing", context.vehicle_spec.name)
+        else:
+            self._apply_manual_control(actor, metrics)
+
+        self._elapsed += dt
+
+        if metrics and metrics["longitudinal"] > 12.0 and abs(metrics["lateral"]) < 1.5:
+            self._finish_overtake(context)
+        elif self._elapsed >= 15.0:
+            LOGGER.warning(
+                "Vehicle '%s' timed out while overtaking '%s'; forcing completion",
+                context.vehicle_spec.name,
+                self._lead_vehicle,
+            )
+            self._finish_overtake(context, force=True)
+
+    def _apply_manual_control(self, actor: Any, metrics: Optional[Dict[str, float]]) -> None:
+        try:
+            import carla  # type: ignore
+        except ModuleNotFoundError:
+            return
+
+        control = carla.VehicleControl()
+        control.throttle = 0.8
+        control.brake = 0.0
+        control.hand_brake = False
+
+        if metrics is None:
+            control.steer = 0.2
+        else:
+            if metrics["longitudinal"] < 6.0:
+                control.steer = 0.25
+            elif metrics["longitudinal"] < 12.0:
+                control.steer = 0.0
+            else:
+                control.steer = -0.25 if metrics["lateral"] > 0 else 0.25
+
+        try:  # pragma: no cover - depends on CARLA API
+            actor.apply_control(control)
+        except Exception:
+            LOGGER.exception("Failed to apply manual control for overtaking vehicle")
+
+    def _finish_overtake(self, context: ComponentContext, force: bool = False) -> None:
+        actor = context.actor
+        if actor is not None:
+            try:
+                actor.set_autopilot(True)
+            except Exception:  # pragma: no cover - depends on CARLA API
+                LOGGER.debug("Unable to restore autopilot state for '%s'", context.vehicle_spec.name)
+
+        lead_actor = _resolve_vehicle_actor(context, self._lead_vehicle) if self._lead_vehicle else None
+        if lead_actor is not None:
+            try:  # pragma: no cover - depends on CARLA API
+                lead_actor.set_autopilot(True)
+            except Exception:
+                LOGGER.debug("Lead vehicle '%s' autopilot restoration skipped", self._lead_vehicle)
+
+        state = _ensure_overtake_state(context)
+        state["phase"] = "idle"
+        state["cooldown"] = 3.0
+        state["completed_cycles"] = int(state.get("completed_cycles", 0)) + 1
+
+        context.scenario.properties.pop(_OVERTAKE_ACK_KEY, None)
+        context.scenario.properties.pop(_OVERTAKE_REQUEST_KEY, None)
+
+        self._reset_cycle()
+
+        LOGGER.info(
+            "Vehicle '%s' completed overtaking sequence%s",
+            context.vehicle_spec.name,
+            " (forced)" if force else "",
+        )
+
+    def _reset_cycle(self) -> None:
+        self._started = False
+        self._elapsed = 0.0
+        self._lane_change_requested = False
+        self._return_requested = False
+        self._manual_control = False
 
 
 class _ConstantVelocityBehaviour(_BaseBehaviour):
@@ -281,8 +779,11 @@ class _ConstantVelocityBehaviour(_BaseBehaviour):
     @classmethod
     def from_specs(cls, component: ComponentSpec, vehicle: VehicleSpec) -> "_ConstantVelocityBehaviour":
         speed = component.config.get("target_speed") or component.config.get("speed")
+        print("test")
         if speed is None:
             speed = vehicle.metadata.get("default_speed")
+            print("default")
+        print(speed)
         parsed = _parse_speed(speed)
         if parsed is None:
             raise ValueError(

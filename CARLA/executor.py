@@ -177,6 +177,7 @@ class CarlaScenarioExecutor:
         for vehicle in self.scenario.vehicles:
             actor = self._spawn_vehicle(world, vehicle)
             self._actors[vehicle.name] = actor
+            self._register_vehicle_actor(vehicle.name, actor)
             self._scheduler.bind_vehicle(vehicle, actor)
             if actor is not None and self._is_overtaking_vehicle(vehicle):
                 self._overtaking_vehicle_name = vehicle.name
@@ -237,6 +238,21 @@ class CarlaScenarioExecutor:
                 len(spawn_candidates),
             )
         return actor
+
+    def _register_vehicle_actor(self, vehicle_name: str, actor: object | None) -> None:
+        """Keep track of spawned actor identifiers for cross-component coordination."""
+
+        if not hasattr(self.scenario, "properties"):
+            return
+
+        registry = self.scenario.properties.setdefault("_vehicle_actor_ids", {})
+        if actor is None:
+            registry.pop(vehicle_name, None)
+            return
+
+        actor_id = getattr(actor, "id", None)
+        if actor_id is not None:
+            registry[vehicle_name] = actor_id
 
     def _resolve_spawn_point(self, world, spec: SpawnPointSpec | None):
         import carla  # type: ignore
@@ -338,6 +354,10 @@ class CarlaScenarioExecutor:
             except Exception:  # pragma: no cover - depends on CARLA API
                 LOGGER.exception("Failed to destroy actor for vehicle '%s'", name)
         self._actors.clear()
+        if hasattr(self.scenario, "properties"):
+            actor_registry = self.scenario.properties.get("_vehicle_actor_ids")
+            if isinstance(actor_registry, dict):
+                actor_registry.clear()
 
     # ------------------------------------------------------------------
     # Spectator camera helpers
