@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -15,13 +16,13 @@ class CarlaScenarioExecutor:
     """Runtime bridge that executes DSL scenarios inside CARLA."""
 
     def __init__(
-        self,
-        scenario: ScenarioSpec,
-        *,
-        host: str = "localhost",
-        port: int = 2000,
-        timeout: float = 5.0,
-        behaviour_registry: BehaviourRegistry | None = None,
+            self,
+            scenario: ScenarioSpec,
+            *,
+            host: str = "localhost",
+            port: int = 2000,
+            timeout: float = 5.0,
+            behaviour_registry: BehaviourRegistry | None = None,
     ) -> None:
         self.scenario = scenario
         self.host = host
@@ -35,6 +36,11 @@ class CarlaScenarioExecutor:
         self._actors: Dict[str, object] = {}
         self._scheduler = Scheduler(scenario, registry=self.behaviour_registry)
 
+        self._spectator = None
+        self._overtaking_vehicle_name: Optional[str] = None
+        self._spectator_follow_distance = 7.5
+        self._spectator_follow_height = 3.0
+
     # ------------------------------------------------------------------
     # Lifecycle management
     # ------------------------------------------------------------------
@@ -47,7 +53,9 @@ class CarlaScenarioExecutor:
         world = self._prepare_world(client)
         self._apply_weather(world)
 
+        self._spectator = self._safe_get_spectator(world)
         self._spawn_vehicles(world)
+        self._update_spectator_follow()
 
         self._client = client
         self._world = world
@@ -69,6 +77,7 @@ class CarlaScenarioExecutor:
             self._world = None
             self._client = None
             self._original_settings = None
+            self._spectator = None
             self._actors.clear()
 
     # ------------------------------------------------------------------
@@ -98,6 +107,7 @@ class CarlaScenarioExecutor:
             steps += 1
 
             self._scheduler.step(self._world, sim_time, dt)
+            self._update_spectator_follow()
 
             if duration_seconds is not None and sim_time >= duration_seconds:
                 LOGGER.info("Simulation duration %.2fs reached", sim_time)
@@ -168,6 +178,8 @@ class CarlaScenarioExecutor:
             actor = self._spawn_vehicle(world, vehicle)
             self._actors[vehicle.name] = actor
             self._scheduler.bind_vehicle(vehicle, actor)
+            if actor is not None and self._is_overtaking_vehicle(vehicle):
+                self._overtaking_vehicle_name = vehicle.name
 
     def _spawn_vehicle(self, world, vehicle: VehicleSpec):
         import carla  # type: ignore
@@ -184,22 +196,46 @@ class CarlaScenarioExecutor:
             else:
                 blueprint = matches[0]
 
-        spawn_point = self._resolve_spawn_point(world, vehicle.spawn)
         actor = None
-        if spawn_point is None:
-            LOGGER.warning("No spawn point for vehicle '%s'; spawning at default location", vehicle.name)
-            spawn_points = world.get_map().get_spawn_points()
-            if spawn_points:
-                spawn_point = spawn_points[0]
-            else:
-                spawn_point = carla.Transform()
-        try:
-            actor = world.try_spawn_actor(blueprint, spawn_point)
-            if actor is None:
-                raise RuntimeError("Failed to spawn actor; location occupied")
-            LOGGER.info("Spawned vehicle '%s' with blueprint '%s'", vehicle.name, blueprint.id)
-        except Exception:  # pragma: no cover - depends on CARLA API
-            LOGGER.exception("Failed to spawn vehicle '%s'", vehicle.name)
+        spawn_candidates = list(self._candidate_spawn_points(world, vehicle.spawn))
+        if not spawn_candidates:
+            spawn_candidates = [carla.Transform()]
+
+        for attempt, spawn_point in enumerate(spawn_candidates, start=1):
+            try:
+                actor = world.try_spawn_actor(blueprint, spawn_point)
+            except Exception:  # pragma: no cover - depends on CARLA API
+                LOGGER.exception(
+                    "Failed to spawn vehicle '%s' on attempt %d", vehicle.name, attempt
+                )
+                continue
+
+            if actor is not None:
+                if attempt > 1:
+                    LOGGER.info(
+                        "Spawned vehicle '%s' with blueprint '%s' after %d attempts",
+                        vehicle.name,
+                        blueprint.id,
+                        attempt,
+                    )
+                else:
+                    LOGGER.info(
+                        "Spawned vehicle '%s' with blueprint '%s'", vehicle.name, blueprint.id
+                    )
+                break
+
+            LOGGER.debug(
+                "Spawn candidate %d for vehicle '%s' occupied; trying next option",
+                attempt,
+                vehicle.name,
+            )
+
+        if actor is None:
+            LOGGER.error(
+                "Unable to spawn vehicle '%s'; all %d candidate spawn points were occupied",
+                vehicle.name,
+                len(spawn_candidates),
+            )
         return actor
 
     def _resolve_spawn_point(self, world, spec: SpawnPointSpec | None):
@@ -228,6 +264,65 @@ class CarlaScenarioExecutor:
             return carla.Transform(location or carla.Location(), rotation or carla.Rotation())
         return map_spawn_points[0] if map_spawn_points else carla.Transform()
 
+    def _candidate_spawn_points(self, world, spec: SpawnPointSpec | None):
+        import carla  # type: ignore
+
+        map_spawn_points = world.get_map().get_spawn_points()
+        if not map_spawn_points:
+            yield carla.Transform()
+            return
+
+        primary = self._resolve_spawn_point(world, spec) if spec is not None else None
+        yielded: set[tuple[float, float, float, float, float, float]] = set()
+
+        def _key(transform):
+            location = transform.location
+            rotation = transform.rotation
+            return (
+                round(location.x, 3),
+                round(location.y, 3),
+                round(location.z, 3),
+                round(rotation.pitch, 1),
+                round(rotation.yaw, 1),
+                round(rotation.roll, 1),
+            )
+
+        if primary is not None:
+            key = _key(primary)
+            yielded.add(key)
+            yield primary
+
+        for transform in map_spawn_points:
+            key = _key(transform)
+            if key in yielded:
+                continue
+            yielded.add(key)
+            yield transform
+
+        def _key(transform):
+            location = transform.location
+            rotation = transform.rotation
+            return (
+                round(location.x, 3),
+                round(location.y, 3),
+                round(location.z, 3),
+                round(rotation.pitch, 1),
+                round(rotation.yaw, 1),
+                round(rotation.roll, 1),
+            )
+
+        if primary is not None:
+            key = _key(primary)
+            yielded.add(key)
+            yield primary
+
+        for transform in map_spawn_points:
+            key = _key(transform)
+            if key in yielded:
+                continue
+            yielded.add(key)
+            yield transform
+
     def _destroy_actors(self) -> None:
         if not self._actors:
             return
@@ -240,3 +335,68 @@ class CarlaScenarioExecutor:
             except Exception:  # pragma: no cover - depends on CARLA API
                 LOGGER.exception("Failed to destroy actor for vehicle '%s'", name)
         self._actors.clear()
+
+    # ------------------------------------------------------------------
+    # Spectator camera helpers
+    # ------------------------------------------------------------------
+    def _safe_get_spectator(self, world):
+        get_spectator = getattr(world, "get_spectator", None)
+        if not callable(get_spectator):
+            return None
+        try:
+            return get_spectator()
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Failed to obtain CARLA spectator")
+            return None
+
+    def _is_overtaking_vehicle(self, vehicle: VehicleSpec) -> bool:
+        for component in vehicle.components:
+            behaviour = (component.behaviour or "").lower()
+            if behaviour in {"tm_overtake_on_ack", "overtake_on_ack"}:
+                return True
+        return False
+
+    def _update_spectator_follow(self) -> None:
+        if self._spectator is None or self._overtaking_vehicle_name is None:
+            return
+
+        actor = self._actors.get(self._overtaking_vehicle_name)
+        if actor is None:
+            return
+
+        try:
+            base_transform = actor.get_transform()
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception(
+                "Failed to query transform for overtaking vehicle '%s'", self._overtaking_vehicle_name
+            )
+            return
+
+        try:
+            import carla  # type: ignore
+        except ModuleNotFoundError:  # pragma: no cover - runtime environment without CARLA
+            LOGGER.debug("CARLA Python API unavailable; spectator follow disabled")
+            self._spectator = None
+            return
+
+        yaw_rad = math.radians(base_transform.rotation.yaw)
+        forward_x = math.cos(yaw_rad)
+        forward_y = math.sin(yaw_rad)
+
+        location = carla.Location(
+            base_transform.location.x - forward_x * self._spectator_follow_distance,
+            base_transform.location.y - forward_y * self._spectator_follow_distance,
+            base_transform.location.z + self._spectator_follow_height,
+        )
+
+        rotation = carla.Rotation(
+            pitch=-10.0,
+            yaw=base_transform.rotation.yaw,
+            roll=0.0,
+        )
+
+        transform = carla.Transform(location, rotation)
+        try:
+            self._spectator.set_transform(transform)
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Failed to update spectator transform")

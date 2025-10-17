@@ -60,6 +60,11 @@ class BehaviourRegistry:
         registry.register("noop", lambda *_: _NoOpBehaviour())
         registry.register("autopilot", lambda c, v: _AutopilotBehaviour())
         registry.register("constant_velocity", _ConstantVelocityBehaviour.from_specs)
+        registry.register("tm_autopilot_setup_a", _TrafficManagerAutopilotBehaviour.from_specs)
+        registry.register("tm_autopilot_setup_b", _TrafficManagerAutopilotBehaviour.from_specs)
+        registry.register("ack_handler", lambda *_: _AckHandlerBehaviour())
+        registry.register("request_permission", lambda *_: _PermissionRequestBehaviour())
+        registry.register("tm_overtake_on_ack", lambda *_: _OvertakeOnAckBehaviour())
         return registry
 
 
@@ -101,6 +106,170 @@ class _AutopilotBehaviour(_BaseBehaviour):
             )
         except AttributeError:  # pragma: no cover - depends on CARLA API
             LOGGER.exception("Vehicle actor does not support autopilot")
+
+
+class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
+    """Autopilot behaviour that also configures the CARLA traffic manager."""
+
+    def __init__(self, config: Dict[str, Any] | None = None) -> None:
+        super().__init__()
+        self._config = dict(config or {})
+
+    @classmethod
+    def from_specs(
+        cls, component: ComponentSpec, vehicle: VehicleSpec
+    ) -> "_TrafficManagerAutopilotBehaviour":
+        return cls(component.config)
+
+    def setup(self, context: ComponentContext) -> None:
+        super().setup(context)
+        actor = context.actor
+        if actor is None:
+            return
+
+        try:
+            import carla  # type: ignore
+        except ModuleNotFoundError:  # pragma: no cover - runtime environment without CARLA
+            LOGGER.debug("CARLA Python API is unavailable; skipping traffic manager setup")
+            return
+
+        world = context.world
+        get_client = getattr(world, "get_client", None)
+        if not callable(get_client):
+            LOGGER.debug("World object does not expose a CARLA client; cannot configure traffic manager")
+            return
+
+        try:
+            client = get_client()
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Failed to obtain CARLA client from world; traffic manager setup skipped")
+            return
+
+        tm_port = self._parse_int_config("tm_port") or self._parse_int_config("port")
+        try:
+            traffic_manager = (
+                client.get_trafficmanager(tm_port)
+                if tm_port is not None
+                else client.get_trafficmanager()
+            )
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Unable to acquire CARLA traffic manager")
+            return
+
+        if traffic_manager is None:
+            LOGGER.debug("CARLA traffic manager not available; skipping configuration")
+            return
+
+        self._apply_tm_configuration(traffic_manager, actor)
+
+    def _parse_int_config(self, key: str) -> Optional[int]:
+        if key not in self._config:
+            return None
+        try:
+            return int(self._config[key])
+        except (TypeError, ValueError):
+            LOGGER.warning("Invalid integer value '%s' for traffic manager option '%s'", self._config[key], key)
+            return None
+
+    def _apply_tm_configuration(self, traffic_manager: Any, actor: Any) -> None:
+        config = self._config
+        if not config:
+            return
+
+        def _call(method_name: str, *args: Any) -> None:
+            method = getattr(traffic_manager, method_name, None)
+            if not callable(method):
+                LOGGER.debug("Traffic manager does not provide method '%s'", method_name)
+                return
+            try:
+                method(actor, *args)
+            except Exception:  # pragma: no cover - depends on CARLA API
+                LOGGER.exception("Traffic manager call '%s' failed", method_name)
+
+        if "speed_offset" in config:
+            try:
+                percentage = float(config["speed_offset"])
+                _call("vehicle_percentage_speed_difference", percentage)
+            except (TypeError, ValueError):
+                LOGGER.warning("Invalid speed_offset '%s' for traffic manager", config["speed_offset"])
+
+        if "auto_lane_change" in config:
+            _call("auto_lane_change", bool(config["auto_lane_change"]))
+
+        if "ignore_lights_percentage" in config:
+            try:
+                percentage = float(config["ignore_lights_percentage"])
+                _call("ignore_lights_percentage", percentage)
+            except (TypeError, ValueError):
+                LOGGER.warning(
+                    "Invalid ignore_lights_percentage '%s' for traffic manager",
+                    config["ignore_lights_percentage"],
+                )
+
+        if "distance_to_leading_vehicle" in config:
+            try:
+                distance = float(config["distance_to_leading_vehicle"])
+                _call("distance_to_leading_vehicle", distance)
+            except (TypeError, ValueError):
+                LOGGER.warning(
+                    "Invalid distance_to_leading_vehicle '%s' for traffic manager",
+                    config["distance_to_leading_vehicle"],
+                )
+
+        if "collision_detection" in config:
+            _call("collision_detection", bool(config["collision_detection"]))
+
+
+class _PermissionRequestBehaviour(_BaseBehaviour):
+    """Simulate the transmission of an overtaking permission request."""
+
+    def __init__(self) -> None:
+        self._requested = False
+
+    def setup(self, context: ComponentContext) -> None:
+        LOGGER.info("Vehicle '%s' ready to issue overtaking request", context.vehicle_spec.name)
+
+    def tick(self, context: ComponentContext, dt: float) -> None:
+        if self._requested:
+            return
+        context.scenario.properties["overtake_request"] = "pending"
+        self._requested = True
+        LOGGER.info("Vehicle '%s' requested overtaking permission", context.vehicle_spec.name)
+
+
+class _AckHandlerBehaviour(_BaseBehaviour):
+    """Respond to a pending overtaking permission request."""
+
+    def __init__(self) -> None:
+        self._acknowledged = False
+
+    def setup(self, context: ComponentContext) -> None:
+        LOGGER.info("Vehicle '%s' ready to handle overtaking acknowledgements", context.vehicle_spec.name)
+
+    def tick(self, context: ComponentContext, dt: float) -> None:
+        if self._acknowledged:
+            return
+        if context.scenario.properties.get("overtake_request") == "pending":
+            context.scenario.properties["permission_ack"] = "granted"
+            self._acknowledged = True
+            LOGGER.info("Vehicle '%s' granted overtaking permission", context.vehicle_spec.name)
+
+
+class _OvertakeOnAckBehaviour(_BaseBehaviour):
+    """Activate a simple overtake manoeuvre once permission is granted."""
+
+    def __init__(self) -> None:
+        self._started = False
+
+    def setup(self, context: ComponentContext) -> None:
+        LOGGER.info("Vehicle '%s' waiting for overtaking permission", context.vehicle_spec.name)
+
+    def tick(self, context: ComponentContext, dt: float) -> None:
+        if self._started:
+            return
+        if context.scenario.properties.get("permission_ack") == "granted":
+            self._started = True
+            LOGGER.info("Vehicle '%s' initiating overtake manoeuvre", context.vehicle_spec.name)
 
 
 class _ConstantVelocityBehaviour(_BaseBehaviour):
