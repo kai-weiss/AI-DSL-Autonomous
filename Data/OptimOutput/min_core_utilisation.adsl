@@ -6,7 +6,7 @@ SYSTEM CooperativeOvertaking {
 
     VEHICLE A {
         COMPONENT Perception_A {
-            period = 41ms;
+            period = 40ms;
             deadline = 40ms;
             WCET = 5ms;
             priority = 1;
@@ -14,47 +14,47 @@ SYSTEM CooperativeOvertaking {
 
         COMPONENT AckHandler_A {
             deadline = 2ms;
-            WCET = 3ms;
+            WCET = 1ms;
             priority = 1;
         }
     }
 
     VEHICLE B {
         COMPONENT Perception_B {
-            period = 48ms;
+            period = 49ms;
             deadline = 40ms;
-            WCET = 6ms;
+            WCET = 7ms;
             priority = 1;
         }
 
         COMPONENT PermissionReqTx_B {
             deadline = 2ms;
-            WCET = 1ms;
+            WCET = 2ms;
             priority = 1;
         }
 
         COMPONENT PermissionAckRx_B {
             deadline = 2ms;
-            WCET = 1ms;
+            WCET = 3ms;
             priority = 1;
         }
 
         COMPONENT TrajectoryPlanner_B {
-            period = 19ms;
+            period = 26ms;
             deadline = 20ms;
-            WCET = 12ms;
+            WCET = 10ms;
             priority = 1;
         }
 
         COMPONENT Controller_B {
             deadline = 25ms;
-            WCET = 5ms;
+            WCET = 6ms;
             priority = 1;
         }
     }
 
     CONNECT OvertakeRequest: B.PermissionReqTx_B.output -> A.AckHandler_A.input {
-        latency_budget = 8ms;
+        latency_budget = 9ms;
     }
 
     CONNECT PermissionAck: A.AckHandler_A.output -> B.PermissionAckRx_B.input {
@@ -72,6 +72,7 @@ SYSTEM CooperativeOvertaking {
     PROPERTY EndToEndLatency:
       "PIPELINE PermissionReqTx_B
                      -> AckHandler_A
+      
                      -> PermissionAckRx_B
                      -> TrajectoryPlanner_B
                      -> Controller_B

@@ -272,8 +272,9 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
         for idx, raw in enumerate(model.optimisation.objectives)
     ]
 
-    out_dir = Path("Output")
-    out_dir.mkdir(exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[2]
+    out_dir = repo_root / "Data" / "OptimOutput"
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     chosen_ids: set[int] = set()
 
@@ -303,6 +304,6 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
 
 
 if __name__ == "__main__":
-    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl", generations=10, algorithm="sms-emoa")
+    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/2.adsl", generations=10, algorithm="sms-emoa")
     # print(m)
     print("Best individual:", ind.values, ind.objectives)

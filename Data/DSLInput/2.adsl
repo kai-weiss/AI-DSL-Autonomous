@@ -1,0 +1,106 @@
+// Cooperative Overtaking DSL Model
+
+SYSTEM CooperativeOvertaking {
+    //Global scheduling assumptions
+    CPU {
+        cores      = 1;
+        scheduler  = PREEMPTIVE_FP;
+    }
+
+    VEHICLE A {
+        COMPONENT Perception_A {
+            period = 40ms;
+            deadline = 40ms;
+            WCET = 10ms;
+            priority = 1;
+        }
+
+        COMPONENT AckHandler_A {
+            // Triggered by an overtaking request message from Vehicle B
+            WCET = 2ms;
+            deadline = 2ms;
+            priority = 1;
+        }
+    }
+
+    VEHICLE B {
+        COMPONENT Perception_B {
+            period = 40ms;
+            deadline = 40ms;
+            WCET = 10ms;
+            priority = 1;
+        }
+        COMPONENT PermissionReqTx_B {
+            // Triggered when Perception_B detects a "slower vehicle ahead"
+            WCET = 2ms;
+            deadline = 2ms;
+            priority = 1;
+        }
+        COMPONENT PermissionAckRx_B {
+            // Triggered by an Ack/Nack message from Vehicle A
+            WCET = 2ms;
+            deadline = 2ms;
+            priority = 1;
+        }
+        COMPONENT TrajectoryPlanner_B {
+            period = 10ms;
+            deadline = 20ms;
+            WCET = 10ms;
+            priority = 1;
+        }
+        COMPONENT Controller_B {
+            // Triggered when a new trajectory is available
+            WCET = 25ms;
+            deadline = 25ms;
+            priority = 1;
+        }
+    }
+
+    // V2V link from B to A for overtaking request (network latency budget)
+    CONNECT OvertakeRequest: B.PermissionReqTx_B.output -> A.AckHandler_A.input { latency_budget = 8ms; }
+
+    // V2V link from A back to B for permission acknowledgment (network latency budget)
+    CONNECT PermissionAck: A.AckHandler_A.output -> B.PermissionAckRx_B.input { latency_budget = 8ms; }
+
+    // Internal connections on vehicle B
+    CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input { latency_budget = 2ms; }
+    CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input { latency_budget = 100ms; }
+
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE PermissionReqTx_B
+               -> AckHandler_A
+
+               -> PermissionAckRx_B
+               -> TrajectoryPlanner_B
+               -> Controller_B
+       WITHIN 145ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            A.Perception_A.period    range 33ms .. 50ms;
+            A.Perception_A.WCET      range 5ms .. 15ms;
+            A.AckHandler_A.WCET      range 1ms .. 4ms;
+
+            B.Perception_B.period         range 33ms .. 50ms;
+            B.Perception_B.WCET           range 5ms .. 15ms;
+            B.PermissionReqTx_B.WCET      range 1ms .. 4ms;
+            B.PermissionAckRx_B.WCET      range 1ms .. 4ms;
+
+            B.TrajectoryPlanner_B.period   range 10ms .. 30ms;
+            B.TrajectoryPlanner_B.WCET     range 10ms .. 30ms;
+            B.Controller_B.WCET            range 3ms .. 7ms;
+
+            OvertakeRequest.latency_budget range 4ms .. 16ms;
+            PermissionAck.latency_budget   range 4ms .. 16ms;
+        }
+        OBJECTIVES{
+            minimise worst_end2end_latency;
+            minimise max_core_utilisation;
+        }
+        CONSTRAINTS{
+            assert EndToEndLatency;          // re-use the PROPERTY
+            assert deadline_misses == 0;
+        }
+    }
+}

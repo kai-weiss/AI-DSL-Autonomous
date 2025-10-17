@@ -739,7 +739,7 @@ clock e;</declaration>
     </location>
     <location id="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B">
       <name>Conn_PermissionAckRx_B_to_TrajectoryPlanner_B</name>
-      <label kind="invariant">t &lt;= 27 &amp;&amp; e &lt;= 3</label>
+      <label kind="invariant">t &lt;= 27 &amp;&amp; e &lt;= 2</label>
     </location>
     <location id="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B">
       <name>Conn_TrajectoryPlanner_B_to_Controller_B</name>
@@ -799,7 +799,7 @@ clock e;</declaration>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">e == 3</label>
+      <label kind="guard">e == 2</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B" />
