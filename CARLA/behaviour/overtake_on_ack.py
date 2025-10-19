@@ -32,6 +32,8 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         self._lane_change_requested = False
         self._return_requested = False
         self._manual_control = False
+        self._lane_change_last_request = 0.0
+        self._return_last_request = 0.0
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' waiting for overtaking permission", context.vehicle_spec.name)
@@ -86,6 +88,8 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         self._elapsed = 0.0
         self._lane_change_requested = False
         self._return_requested = False
+        self._lane_change_last_request = 0.0
+        self._return_last_request = 0.0
 
         LOGGER.info(
             "Vehicle '%s' initiating overtake of '%s'",
@@ -119,23 +123,56 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
 
         traffic_manager = resolve_traffic_manager(context, context.vehicle_spec.name)
 
-        if traffic_manager is not None:
-            if not self._lane_change_requested:
-                if call_tm_method(traffic_manager, "force_lane_change", actor, True):
+        if traffic_manager is not None and not self._manual_control:
+            request_interval = 1.0
+
+            need_lane_change = not metrics or abs(metrics.get("lateral", 0.0)) < 1.0
+            if (
+                    not self._lane_change_requested
+                    or (
+                    need_lane_change
+                    and self._elapsed - self._lane_change_last_request >= request_interval
+            )
+            ):
+                if call_tm_method(traffic_manager, "force_lane_change", actor, False):
+                    if not self._lane_change_requested:
+                        LOGGER.info(
+                            "Vehicle '%s' requested lane change to begin overtaking",
+                            context.vehicle_spec.name,
+                        )
+                    else:
+                        LOGGER.debug(
+                            "Vehicle '%s' re-issued lane change request to maintain overtake",
+                            context.vehicle_spec.name,
+                        )
                     self._lane_change_requested = True
-                    LOGGER.info(
-                        "Vehicle '%s' requested lane change to begin overtaking",
-                        context.vehicle_spec.name,
-                    )
+                    self._lane_change_last_request = self._elapsed
+
             call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0)
 
-            if metrics and not self._return_requested and metrics["longitudinal"] > 8.0:
-                if call_tm_method(traffic_manager, "force_lane_change", actor, False):
-                    self._return_requested = True
-                    LOGGER.info(
-                        "Vehicle '%s' requested return to lane after passing",
-                        context.vehicle_spec.name,
-                    )
+            if metrics and metrics["longitudinal"] > 8.0:
+                need_return = abs(metrics["lateral"]) > 0.5
+                if (
+                        not self._return_requested
+                        or (
+                        need_return
+                        and self._elapsed - self._return_last_request >= request_interval
+                )
+                ):
+                    if call_tm_method(traffic_manager, "force_lane_change", actor, True):
+                        if not self._return_requested:
+                            LOGGER.info(
+                                "Vehicle '%s' requested return to lane after passing",
+                                context.vehicle_spec.name,
+                            )
+                        else:
+                            LOGGER.debug(
+                                "Vehicle '%s' re-issued lane return request while completing overtake",
+                                context.vehicle_spec.name,
+                            )
+                        self._return_requested = True
+                        self._return_last_request = self._elapsed
+
         else:
             self._apply_manual_control(actor, metrics)
 
@@ -175,6 +212,18 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         except Exception:
             LOGGER.exception("Failed to apply manual control for overtaking vehicle")
 
+    def _activate_manual_override(self, context: ComponentContext, actor: Any) -> None:
+        if self._manual_control:
+            return
+
+        try:  # pragma: no cover - depends on CARLA API
+            actor.set_autopilot(False)
+        except Exception:
+            LOGGER.exception("Unable to disable autopilot for manual overtake control")
+        else:
+            self._manual_control = True
+            self._stuck_timer = 0.0
+
     def _finish_overtake(self, context: ComponentContext, force: bool = False) -> None:
         actor = context.actor
         if actor is not None:
@@ -212,3 +261,5 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         self._lane_change_requested = False
         self._return_requested = False
         self._manual_control = False
+        self._lane_change_last_request = 0.0
+        self._return_last_request = 0.0
