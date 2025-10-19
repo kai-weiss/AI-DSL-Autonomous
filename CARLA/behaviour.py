@@ -277,6 +277,40 @@ class _AutopilotBehaviour(_BaseBehaviour):
         except AttributeError:  # pragma: no cover - depends on CARLA API
             LOGGER.exception("Vehicle actor does not support autopilot")
 
+        self._enable_autopilot(actor, context)
+
+    def _enable_autopilot(self, actor: Any, context: ComponentContext,
+                          tm_port: Optional[int] = None) -> bool:
+        try:
+            if tm_port is None:
+                actor.set_autopilot(True)
+            else:
+                actor.set_autopilot(True, tm_port)
+        except AttributeError:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception("Vehicle actor does not support autopilot")
+            return False
+        except Exception:  # pragma: no cover - depends on CARLA API
+            LOGGER.exception(
+                "Failed to enable autopilot for vehicle '%s' (component '%s')",
+                context.vehicle_spec.name,
+                context.component_spec.name,
+            )
+            return False
+        else:
+            if tm_port is None:
+                LOGGER.info(
+                    "Autopilot enabled for vehicle '%s' (component '%s')",
+                    context.vehicle_spec.name,
+                    context.component_spec.name,
+                )
+            else:
+                LOGGER.info(
+                    "Autopilot enabled for vehicle '%s' via TM port %s (component '%s')",
+                    context.vehicle_spec.name,
+                    tm_port,
+                    context.component_spec.name,
+                )
+            return True
 
 class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
     """Autopilot behaviour that also configures the CARLA traffic manager."""
@@ -292,20 +326,24 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
         return cls(component.config)
 
     def setup(self, context: ComponentContext) -> None:
-        super().setup(context)
         actor = context.actor
         if actor is None:
+            super().setup(context)
             return
 
         try:
             import carla  # type: ignore
         except ModuleNotFoundError:  # pragma: no cover - runtime environment without CARLA
             LOGGER.debug("CARLA Python API is unavailable; skipping traffic manager setup")
+            if not self._enable_autopilot(actor, context):
+                super().setup(context)
             return
 
         client = _resolve_carla_client(context)
         if client is None:
             LOGGER.debug("Unable to obtain CARLA client; traffic manager setup skipped")
+            if not self._enable_autopilot(actor, context):
+                super().setup(context)
             return
 
         tm_port = self._parse_int_config("tm_port") or self._parse_int_config("port")
@@ -317,10 +355,14 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
             )
         except Exception:  # pragma: no cover - depends on CARLA API
             LOGGER.exception("Unable to acquire CARLA traffic manager")
+            if not self._enable_autopilot(actor, context):
+                super().setup(context)
             return
 
         if traffic_manager is None:
             LOGGER.debug("CARLA traffic manager not available; skipping configuration")
+            if not self._enable_autopilot(actor, context):
+                super().setup(context)
             return
 
         try:
@@ -331,6 +373,10 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
         registry = _traffic_manager_registry(context)
         registry[context.vehicle_spec.name] = traffic_manager
 
+        self._synchronise_traffic_manager(context, traffic_manager)
+
+        if not self._enable_autopilot(actor, context, port):
+            super().setup(context)
         self._apply_tm_configuration(traffic_manager, actor)
 
     def _parse_int_config(self, key: str) -> Optional[int]:
@@ -390,6 +436,33 @@ class _TrafficManagerAutopilotBehaviour(_AutopilotBehaviour):
         if "collision_detection" in config:
             _call("collision_detection", bool(config["collision_detection"]))
 
+    def _synchronise_traffic_manager(self, context: ComponentContext, traffic_manager: Any) -> None:
+        synchronous: Optional[bool] = None
+
+        world = context.world
+        get_settings = getattr(world, "get_settings", None) if world is not None else None
+        if callable(get_settings):
+            try:
+                settings = get_settings()
+            except Exception:  # pragma: no cover - depends on CARLA API
+                LOGGER.exception("Failed to query CARLA world settings for TM synchronisation")
+            else:
+                synchronous = bool(getattr(settings, "synchronous_mode", synchronous))
+
+        if synchronous is None:
+            scenario_world = getattr(context.scenario, "world", None)
+            if scenario_world is not None:
+                synchronous = bool(getattr(scenario_world, "synchronous_mode", False))
+
+        if synchronous is None:
+            return
+
+        if _call_tm_method(traffic_manager, "set_synchronous_mode", bool(synchronous)):
+            LOGGER.info(
+                "Traffic manager synchronous mode %s for vehicle '%s'",
+                "enabled" if synchronous else "disabled",
+                context.vehicle_spec.name,
+            )
 
 class _PermissionRequestBehaviour(_BaseBehaviour):
     """Simulate the transmission of an overtaking permission request."""
@@ -418,7 +491,7 @@ class _PermissionRequestBehaviour(_BaseBehaviour):
         actor = context.actor
         traffic_manager = _resolve_traffic_manager(context, context.vehicle_spec.name)
         if traffic_manager is not None and actor is not None:
-            if _call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -35.0):
+            if _call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0):
                 LOGGER.info(
                     "Configured vehicle '%s' for fast approach (speed offset -35%%)",
                     context.vehicle_spec.name,
