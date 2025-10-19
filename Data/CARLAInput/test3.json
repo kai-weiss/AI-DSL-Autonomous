@@ -6,7 +6,7 @@
     "A": {
       "blueprint": "vehicle.mini.cooper",
       "autopilot": false,
-      "spawn": { "map_point": 15 },
+      "spawn": { "map_point": 7 },
       "components": ["Setup_A", "Perception_A", "AckHandler_A"]
     },
     "B": {

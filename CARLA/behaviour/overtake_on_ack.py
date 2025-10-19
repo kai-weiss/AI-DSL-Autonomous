@@ -76,11 +76,6 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         self._lead_vehicle = ack_payload.get("from_vehicle") or self._lead_vehicle
         traffic_manager = resolve_traffic_manager(context, context.vehicle_spec.name)
 
-        if traffic_manager is not None:
-            call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0)
-
-        self._activate_manual_override(context, actor)
-
         if carla is not None:
             try:  # pragma: no cover - depends on CARLA API
                 world = actor.get_world()
@@ -133,6 +128,10 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
             self._finish_overtake(context, force=True)
             return
 
+        if traffic_manager is not None:
+            call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0)
+
+        self._activate_manual_override(context, actor)
         state = ensure_overtake_state(context)
         state["phase"] = "executing"
         state["lead_vehicle"] = self._lead_vehicle
@@ -447,6 +446,7 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
                 lead_actor.set_autopilot(True)
             except Exception:
                 LOGGER.debug("Lead vehicle '%s' autopilot restoration skipped", self._lead_vehicle)
+
 
         state = ensure_overtake_state(context)
         state["phase"] = "idle"
