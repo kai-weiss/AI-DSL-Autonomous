@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import math
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .behaviour import BehaviourRegistry, CARLA_CLIENT_PROPERTY
 from .model import LocationSpec, RotationSpec, ScenarioSpec, SpawnPointSpec, VehicleSpec
@@ -11,6 +12,10 @@ from .scheduler import Scheduler
 
 LOGGER = logging.getLogger(__name__)
 
+@dataclass
+class _PendingSpawn:
+    vehicle: VehicleSpec
+    due_time: float
 
 class CarlaScenarioExecutor:
     """Runtime bridge that executes DSL scenarios inside CARLA."""
@@ -40,6 +45,8 @@ class CarlaScenarioExecutor:
         self._overtaking_vehicle_name: Optional[str] = None
         self._spectator_follow_distance = 7.5
         self._spectator_follow_height = 3.0
+        self._pending_spawns: List[_PendingSpawn] = []
+        self._spawned_transforms: Dict[str, object] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle management
@@ -108,6 +115,7 @@ class CarlaScenarioExecutor:
             sim_time += dt
             steps += 1
 
+            self._process_pending_spawns(self._world, sim_time)
             self._scheduler.step(self._world, sim_time, dt)
             self._update_spectator_follow()
 
@@ -176,13 +184,67 @@ class CarlaScenarioExecutor:
             LOGGER.exception("Failed to apply weather settings")
 
     def _spawn_vehicles(self, world) -> None:
+        self._pending_spawns.clear()
+        self._spawned_transforms.clear()
         for vehicle in self.scenario.vehicles:
+            raw_delay = (
+                vehicle.spawn.delay_seconds
+                if vehicle.spawn and vehicle.spawn.delay_seconds is not None
+                else 0.0
+            )
+            delay = max(raw_delay, 0.0)
+            needs_reference = (
+                vehicle.spawn is not None
+                and vehicle.spawn.reference_vehicle is not None
+                and vehicle.spawn.reference_vehicle not in self._spawned_transforms
+            )
+
+            if delay > 0.0 or needs_reference:
+                self._actors.setdefault(vehicle.name, None)
+                self._pending_spawns.append(_PendingSpawn(vehicle, delay))
+                continue
+
             actor = self._spawn_vehicle(world, vehicle)
-            self._actors[vehicle.name] = actor
-            self._register_vehicle_actor(vehicle.name, actor)
-            self._scheduler.bind_vehicle(vehicle, actor)
-            if actor is not None and self._is_overtaking_vehicle(vehicle):
-                self._overtaking_vehicle_name = vehicle.name
+            self._on_vehicle_spawned(vehicle, actor)
+
+        if self._pending_spawns:
+            self._process_pending_spawns(world, 0.0)
+
+    def _on_vehicle_spawned(self, vehicle: VehicleSpec, actor: object | None) -> None:
+        self._actors[vehicle.name] = actor
+        self._register_vehicle_actor(vehicle.name, actor)
+        self._scheduler.bind_vehicle(vehicle, actor)
+        if actor is not None and self._is_overtaking_vehicle(vehicle):
+            self._overtaking_vehicle_name = vehicle.name
+
+    def _process_pending_spawns(self, world, sim_time: float) -> None:
+        if not self._pending_spawns:
+            return
+
+        remaining: List[_PendingSpawn] = []
+        for pending in self._pending_spawns:
+            due_time = max(pending.due_time, 0.0)
+            if sim_time + 1e-9 < due_time:
+                remaining.append(pending)
+                continue
+
+            spec = pending.vehicle.spawn
+            if (
+                spec is not None
+                and spec.reference_vehicle is not None
+                and spec.reference_vehicle not in self._spawned_transforms
+            ):
+                remaining.append(pending)
+                continue
+
+            actor = self._spawn_vehicle(world, pending.vehicle)
+            if actor is None:
+                remaining.append(_PendingSpawn(pending.vehicle, sim_time + 0.1))
+                continue
+
+            self._on_vehicle_spawned(pending.vehicle, actor)
+
+        self._pending_spawns = remaining
 
     def _spawn_vehicle(self, world, vehicle: VehicleSpec):
         import carla  # type: ignore
@@ -200,7 +262,9 @@ class CarlaScenarioExecutor:
                 blueprint = matches[0]
 
         actor = None
-        spawn_candidates = list(self._candidate_spawn_points(world, vehicle.spawn))
+        spawn_candidates = list(
+            self._candidate_spawn_points(world, vehicle.spawn, vehicle.name)
+        )
         if not spawn_candidates:
             spawn_candidates = [carla.Transform()]
 
@@ -214,6 +278,20 @@ class CarlaScenarioExecutor:
                 continue
 
             if actor is not None:
+                saved_location = carla.Location(
+                    spawn_point.location.x,
+                    spawn_point.location.y,
+                    spawn_point.location.z,
+                )
+                saved_rotation = carla.Rotation(
+                    spawn_point.rotation.pitch,
+                    spawn_point.rotation.yaw,
+                    spawn_point.rotation.roll,
+                )
+                self._spawned_transforms[vehicle.name] = carla.Transform(
+                    saved_location, saved_rotation
+                )
+
                 if attempt > 1:
                     LOGGER.info(
                         "Spawned vehicle '%s' with blueprint '%s' after %d attempts",
@@ -256,12 +334,47 @@ class CarlaScenarioExecutor:
         if actor_id is not None:
             registry[vehicle_name] = actor_id
 
-    def _resolve_spawn_point(self, world, spec: SpawnPointSpec | None):
+    def _resolve_spawn_point(
+        self, world, spec: SpawnPointSpec | None, *, visited: set[str] | None = None
+    ):
         import carla  # type: ignore
 
         map_spawn_points = world.get_map().get_spawn_points()
         if spec is None:
             return map_spawn_points[0] if map_spawn_points else carla.Transform()
+
+        visited = set(visited or ())
+        if spec.reference_vehicle:
+            reference = spec.reference_vehicle
+            if reference in visited:
+                LOGGER.warning(
+                    "Circular spawn reference detected involving vehicle '%s'", reference
+                )
+            else:
+                visited.add(reference)
+                stored = self._spawned_transforms.get(reference)
+                if stored is not None:
+                    return carla.Transform(
+                        carla.Location(
+                            stored.location.x,
+                            stored.location.y,
+                            stored.location.z,
+                        ),
+                        carla.Rotation(
+                            stored.rotation.pitch,
+                            stored.rotation.yaw,
+                            stored.rotation.roll,
+                        ),
+                    )
+                ref_vehicle = self.scenario.vehicle_by_name(reference)
+                if ref_vehicle and ref_vehicle.spawn is not None:
+                    return self._resolve_spawn_point(
+                        world, ref_vehicle.spawn, visited=visited
+                    )
+                LOGGER.warning(
+                    "Reference vehicle '%s' has no spawn information; using default spawn",
+                    reference,
+                )
 
         target_index = spec.index if spec.index is not None else spec.map_point
         if target_index is not None:
@@ -285,7 +398,9 @@ class CarlaScenarioExecutor:
             return carla.Transform(location or carla.Location(), rotation or carla.Rotation())
         return map_spawn_points[0] if map_spawn_points else carla.Transform()
 
-    def _candidate_spawn_points(self, world, spec: SpawnPointSpec | None):
+    def _candidate_spawn_points(
+        self, world, spec: SpawnPointSpec | None, vehicle_name: str | None = None
+    ):
         import carla  # type: ignore
 
         map_spawn_points = world.get_map().get_spawn_points()
@@ -293,32 +408,11 @@ class CarlaScenarioExecutor:
             yield carla.Transform()
             return
 
-        primary = self._resolve_spawn_point(world, spec) if spec is not None else None
+        visited = {vehicle_name} if vehicle_name else set()
+        primary = (
+            self._resolve_spawn_point(world, spec, visited=visited) if spec is not None else None
+        )
         yielded: set[tuple[float, float, float, float, float, float]] = set()
-
-        def _key(transform):
-            location = transform.location
-            rotation = transform.rotation
-            return (
-                round(location.x, 3),
-                round(location.y, 3),
-                round(location.z, 3),
-                round(rotation.pitch, 1),
-                round(rotation.yaw, 1),
-                round(rotation.roll, 1),
-            )
-
-        if primary is not None:
-            key = _key(primary)
-            yielded.add(key)
-            yield primary
-
-        for transform in map_spawn_points:
-            key = _key(transform)
-            if key in yielded:
-                continue
-            yielded.add(key)
-            yield transform
 
         def _key(transform):
             location = transform.location
@@ -356,6 +450,8 @@ class CarlaScenarioExecutor:
             except Exception:  # pragma: no cover - depends on CARLA API
                 LOGGER.exception("Failed to destroy actor for vehicle '%s'", name)
         self._actors.clear()
+        self._pending_spawns.clear()
+        self._spawned_transforms.clear()
         if hasattr(self.scenario, "properties"):
             actor_registry = self.scenario.properties.get("_vehicle_actor_ids")
             if isinstance(actor_registry, dict):

@@ -31,6 +31,8 @@ class SpawnPointSpec:
     map_point: int | None = None
     location: LocationSpec | None = None
     rotation: RotationSpec | None = None
+    reference_vehicle: str | None = None
+    delay_seconds: float | None = None
 
     def has_transform(self) -> bool:
         return self.location is not None or self.rotation is not None

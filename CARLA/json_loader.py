@@ -315,6 +315,14 @@ def _assign_vehicle_property(vehicle: VehicleSpec, key: str, value: Any) -> None
         vehicle.autopilot = _parse_bool(value)
     elif key_lower in {"spawn_point", "spawn"}:
         vehicle.spawn = _parse_spawn_point(value)
+    elif key_lower in {"spawn_delay", "spawn_delay_seconds", "spawn_delay_s"}:
+        if vehicle.spawn is None:
+            vehicle.spawn = SpawnPointSpec()
+        vehicle.spawn.delay_seconds = _parse_float(value)
+    elif key_lower in {"spawn_like", "spawn_like_vehicle", "spawn_reference", "spawn_reference_vehicle"}:
+        if vehicle.spawn is None:
+            vehicle.spawn = SpawnPointSpec()
+        vehicle.spawn.reference_vehicle = str(value) if value is not None else None
     else:
         vehicle.metadata[key] = value
 
@@ -475,6 +483,9 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
                 return SpawnPointSpec(map_point=parsed)
         parts: Dict[str, float] = {}
         int_parts: Dict[str, int] = {}
+        reference_vehicle: str | None = None
+        delay_seconds: float | None = None
+
         for piece in text.split(","):
             if "=" not in piece:
                 continue
@@ -486,10 +497,19 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
                 if parsed_int is not None:
                     int_parts[key] = parsed_int
                 continue
+            if key in {"like", "like_vehicle", "reference", "reference_vehicle"}:
+                if raw:
+                    reference_vehicle = raw
+                continue
+            if key in {"delay", "delay_seconds", "delay_s"}:
+                parsed_delay = _parse_float(raw)
+                if parsed_delay is not None:
+                    delay_seconds = parsed_delay
+                continue
             parsed = _parse_float(raw)
             if parsed is not None:
                 parts[key] = parsed
-        if parts or int_parts:
+        if parts or int_parts or reference_vehicle or delay_seconds is not None:
             loc = None
             rot = None
             if any(k in parts for k in {"x", "y", "z"}):
@@ -509,6 +529,8 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
                 map_point=int_parts.get("map_point"),
                 location=loc,
                 rotation=rot,
+                reference_vehicle=reference_vehicle,
+                delay_seconds=delay_seconds,
             )
         return None
     if isinstance(value, Mapping):
@@ -516,6 +538,19 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
         map_point = _parse_int(value.get("map_point"))
         loc_val = value.get("location")
         rot_val = value.get("rotation")
+        reference_vehicle = None
+        for ref_key in ("like", "like_vehicle", "reference", "reference_vehicle"):
+            ref_val = value.get(ref_key)
+            if isinstance(ref_val, str) and ref_val:
+                reference_vehicle = ref_val
+                break
+        delay_seconds = None
+        for delay_key in ("delay", "delay_seconds", "delay_s"):
+            delay_val = value.get(delay_key)
+            parsed_delay = _parse_float(delay_val)
+            if parsed_delay is not None:
+                delay_seconds = parsed_delay
+                break
         if isinstance(loc_val, Mapping):
             loc = LocationSpec(
                 x=_parse_float(loc_val.get("x")) or 0.0,
@@ -532,7 +567,14 @@ def _parse_spawn_point(value: Any) -> SpawnPointSpec | None:
             )
         else:
             rot = None
-        if index is None and map_point is None and not loc and not rot:
-            return None
-        return SpawnPointSpec(index=index, map_point=map_point, location=loc, rotation=rot)
-    return None
+            if index is None and map_point is None and not loc and not rot and not reference_vehicle:
+                return None
+            return SpawnPointSpec(
+                index=index,
+                map_point=map_point,
+                location=loc,
+                rotation=rot,
+                reference_vehicle=reference_vehicle,
+                delay_seconds=delay_seconds,
+            )
+        return None
