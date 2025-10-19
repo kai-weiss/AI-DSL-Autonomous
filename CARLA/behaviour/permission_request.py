@@ -51,7 +51,7 @@ class PermissionRequestBehaviour(BaseBehaviour):
         if traffic_manager is not None and actor is not None:
             if call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, -50.0):
                 LOGGER.info(
-                    "Configured vehicle '%s' for fast approach (speed offset -35%%)",
+                    "Configured vehicle '%s' for fast approach (speed offset -50%%)",
                     context.vehicle_spec.name,
                 )
         elif actor is None:
