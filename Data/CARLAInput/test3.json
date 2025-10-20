@@ -27,17 +27,20 @@
     { "name": "Setup_A", "vehicle": "A", "behaviour": "tm_autopilot_setup_A", "wcet": "1ms", "deadline": "5ms",
       "config": {"ignore_lights_percentage": 0 } },
 
+    { "name": "InteriorLight_A", "vehicle":"A","behaviour":"noop","period":"40ms","deadline":"40ms","wcet":"10ms","priority":1 },
     { "name": "Perception_A", "vehicle":"A","behaviour":"noop","period":"40ms","deadline":"40ms","wcet":"10ms","priority":1 },
     { "name": "AckHandler_A", "vehicle":"A","behaviour":"ack_handler","deadline":"4ms","wcet":"2ms","priority":1 },
 
     { "name": "Setup_B", "vehicle": "B", "behaviour": "tm_autopilot_setup_B", "wcet": "1ms", "deadline": "5ms" ,
       "config": {"ignore_lights_percentage": 0 } },
 
+    { "name": "Crash_B","vehicle":"B","behaviour":"noop","deadline":"40ms","wcet":"10ms","priority":1 },
     { "name": "Perception_B","vehicle":"B","behaviour":"noop","period":"40ms","deadline":"40ms","wcet":"10ms","priority":1 },
     { "name": "PermissionReqTx_B","vehicle":"B","behaviour":"request_permission","deadline":"4ms","wcet":"2ms","priority":1 },
     { "name": "PermissionAckRx_B","vehicle":"B","behaviour":"noop","deadline":"4ms","wcet":"2ms","priority":1 },
     { "name": "TrajectoryPlanner_B","vehicle":"B","behaviour":"tm_overtake_on_ack","period":"20ms","deadline":"50ms","wcet":"5ms","priority":1 },
     { "name": "Controller_B","vehicle":"B","behaviour":"noop","deadline":"25ms","wcet":"25ms","priority":1 }
+
   ],
 
   "connections": [
