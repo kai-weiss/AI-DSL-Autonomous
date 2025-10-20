@@ -301,7 +301,7 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         control.hand_brake = False
         control.brake = 0.0
         control.throttle = self._compute_throttle(metrics)
-        control.steer = self._compute_steer(vehicle_transform, target_wp.transform)
+        control.steer = self._compute_steer(vehicle_transform, target_wp.transform, self._overtake_stage)
 
         return control
 
@@ -319,7 +319,12 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
 
         return max(0.4, min(0.85, throttle))
 
-    def _compute_steer(self, vehicle_transform: Any, target_transform: Any) -> float:
+    def _compute_steer(
+        self,
+        vehicle_transform: Any,
+        target_transform: Any,
+        stage: Optional[str] = None,
+    ) -> float:
         yaw = math.radians(vehicle_transform.rotation.yaw)
         forward_x = math.cos(yaw)
         forward_y = math.sin(yaw)
@@ -338,9 +343,24 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
 
         lateral_error = dx * right_x + dy * right_y
 
-        steer = 0.8 * heading_error + 0.08 * lateral_error
+        heading_gain, lateral_gain = self._steer_gains_for_stage(stage)
+
+        steer = heading_gain * heading_error + lateral_gain * lateral_error
 
         return max(-1.0, min(1.0, steer))
+
+    def _steer_gains_for_stage(self, stage: Optional[str]) -> tuple[float, float]:
+        """Return heading and lateral gains tuned for each overtake stage."""
+
+        aggressive_gains = (1.15, 0.14)
+        base_gains = (0.8, 0.08)
+
+        if stage in {"change_out", "returning"}:
+            return aggressive_gains
+        if stage == "overtaking":
+            return base_gains
+
+        return base_gains
 
     def _forward_waypoint(self, waypoint: Any) -> Optional[Any]:
         if waypoint is None or carla is None:
