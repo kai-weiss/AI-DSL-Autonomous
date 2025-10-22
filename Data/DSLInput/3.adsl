@@ -9,7 +9,7 @@ SYSTEM CooperativeOvertaking {
     }
 
     VEHICLE A {
-        COMPONENT Innenlicht_A {
+        COMPONENT InteriorLight_A {
             period = 40ms;
             deadline = 40ms;
             WCET = 10ms;

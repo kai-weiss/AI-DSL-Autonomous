@@ -19,6 +19,7 @@ CARLA_CLIENT_PROPERTY = "_carla_client"
 OVERTAKE_STATE_KEY = "_overtake_state"
 OVERTAKE_REQUEST_KEY = "overtake_request"
 OVERTAKE_ACK_KEY = "permission_ack"
+COMPONENT_OUTPUTS_KEY = "_component_outputs"
 
 
 def component_full_name(component: ComponentSpec) -> str:
@@ -32,6 +33,26 @@ def connections_by_src(component: ComponentSpec, scenario: Any) -> Iterable[Any]
     for connection in getattr(scenario, "connections", []):
         if getattr(connection, "src", None) == full_name:
             yield connection
+
+
+def component_output_buffer(context: ComponentContext) -> list[Any]:
+    """Return the mutable output queue for the active component."""
+
+    properties = getattr(context.scenario, "properties", None)
+    if not isinstance(properties, dict):
+        raise AttributeError("Scenario properties must be a mapping to use component outputs")
+
+    outputs = properties.get(COMPONENT_OUTPUTS_KEY)
+    if not isinstance(outputs, dict):
+        outputs = {}
+        properties[COMPONENT_OUTPUTS_KEY] = outputs
+
+    component_name = component_full_name(context.component_spec)
+    queue = outputs.get(component_name)
+    if not isinstance(queue, list):
+        queue = []
+        outputs[component_name] = queue
+    return queue
 
 
 def timedelta_to_seconds(value: Any) -> Optional[float]:

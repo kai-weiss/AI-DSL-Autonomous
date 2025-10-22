@@ -7,8 +7,11 @@ from .ack_handler import AckHandlerBehaviour
 from .autopilot import AutopilotBehaviour, TrafficManagerAutopilotBehaviour
 from .base import BehaviourFactory, ComponentBehaviour
 from .constant_velocity import ConstantVelocityBehaviour
+from .emergency_stop import EmergencyStopBehaviour
+from .interior_light import InteriorLightBehaviour
 from .noop import NoOpBehaviour
 from .overtake_on_ack import OvertakeOnAckBehaviour
+from .permission_ack_receiver import PermissionAckReceiverBehaviour
 from .permission_request import PermissionRequestBehaviour
 
 
@@ -38,6 +41,9 @@ class BehaviourRegistry:
         registry.register("noop", lambda *_: NoOpBehaviour())
         registry.register("autopilot", lambda c, v: AutopilotBehaviour())
         registry.register("constant_velocity", ConstantVelocityBehaviour.from_specs)
+        registry.register("interior_light", InteriorLightBehaviour.from_specs)
+        registry.register("emergency_stop", lambda *_: EmergencyStopBehaviour())
+        registry.register("permission_ack_receiver", lambda *_: PermissionAckReceiverBehaviour())
         registry.register("tm_autopilot_setup_a", TrafficManagerAutopilotBehaviour.from_specs)
         registry.register("tm_autopilot_setup_b", TrafficManagerAutopilotBehaviour.from_specs)
         registry.register("ack_handler", lambda *_: AckHandlerBehaviour())
