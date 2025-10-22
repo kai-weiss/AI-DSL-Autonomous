@@ -21,10 +21,11 @@ def emit_component_template(
 ) -> None:
     period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
     period = to_ms(period_val or 0)
-    wcet = to_ms(getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None) or 0)
-    deadline = to_ms(
-        getattr(comp, "deadline_ms", None) or getattr(comp, "deadline", None)
-    )
+    wcet_val = getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None)
+    wcet = to_ms(wcet_val) or 0
+    deadline_val = getattr(comp, "deadline_ms", None) or getattr(comp, "deadline", None)
+    deadline = to_ms(deadline_val) if deadline_val is not None else None
+
     # fall back to WCET if no explicit deadline is provided
     if deadline is None:
         deadline = wcet
@@ -33,8 +34,14 @@ def emit_component_template(
 
     tpl = ET.SubElement(root, "template")
     ET.SubElement(tpl, "name").text = comp.name
-    decl = ["clock x;", "clock e;"]
+    decl = ["clock x;", "clock slice;"]
     ET.SubElement(tpl, "declaration").text = "\n".join(decl)
+
+    ready_arr = f"ready_{sched_prefix}"
+    running_var = f"running_{sched_prefix}"
+    remaining_arr = f"remaining_{sched_prefix}"
+    wcet_arr = f"WCET_{sched_prefix}"
+    idx_ref = f"IDX_{comp.name}"
 
     # Locations --------------------------------------------------
     idle = ET.SubElement(tpl, "location", id=f"{comp.name}_Idle")
@@ -45,12 +52,12 @@ def emit_component_template(
     ready_loc = ET.SubElement(tpl, "location", id=f"{comp.name}_Ready")
     ET.SubElement(ready_loc, "name").text = "Ready"
 
-    exe = ET.SubElement(tpl, "location", id=f"{comp.name}_Exec")
-    ET.SubElement(exe, "name").text = "Exec"
-    exe_inv = [f"e <= {wcet}"]
+    exec_loc = ET.SubElement(tpl, "location", id=f"{comp.name}_Exec")
+    ET.SubElement(exec_loc, "name").text = "Exec"
+    inv_parts = ["slice <= 1"]
     if deadline is not None:
-        exe_inv.append(f"x <= {deadline}")
-    ET.SubElement(exe, "label", kind="invariant").text = " && ".join(exe_inv)
+        inv_parts.append(f"x <= {deadline}")
+    ET.SubElement(exec_loc, "label", kind="invariant").text = " && ".join(inv_parts)
 
     bad = None
     if deadline is not None:
@@ -59,32 +66,55 @@ def emit_component_template(
 
     ET.SubElement(tpl, "init", ref=idle.get("id"))
 
-    # Idle --release?--> Ready (job released)
+    # Idle --release?--> Ready
     tr_rel = ET.SubElement(tpl, "transition")
     ET.SubElement(tr_rel, "source", ref=idle.get("id"))
     ET.SubElement(tr_rel, "target", ref=ready_loc.get("id"))
     ET.SubElement(tr_rel, "label", kind="synchronisation").text = f"release_{comp.name}?"
-    ready_arr = f"ready_{sched_prefix}"
     ET.SubElement(tr_rel, "label", kind="assignment").text = (
-        f"x = 0, {ready_arr}[{idx}] = true"
+        f"x = 0, slice = 0, {ready_arr}[{idx_ref}] = true, {remaining_arr}[{idx_ref}] = {wcet_arr}[{idx_ref}]"
     )
 
-    # Ready --start?--> Exec (dispatched by scheduler)
+    # Ready --start?--> Exec
     tr_start = ET.SubElement(tpl, "transition")
     ET.SubElement(tr_start, "source", ref=ready_loc.get("id"))
-    ET.SubElement(tr_start, "target", ref=exe.get("id"))
+    ET.SubElement(tr_start, "target", ref=exec_loc.get("id"))
     ET.SubElement(tr_start, "label", kind="synchronisation").text = f"start_{comp.name}?"
-    ET.SubElement(tr_start, "label", kind="assignment").text = "e = 0"
+    ET.SubElement(tr_start, "label", kind="assignment").text = "slice = 0"
+
+    # Execution progress loop (1ms quanta)
+    tr_quantum = ET.SubElement(tpl, "transition")
+    ET.SubElement(tr_quantum, "source", ref=exec_loc.get("id"))
+    ET.SubElement(tr_quantum, "target", ref=exec_loc.get("id"))
+    ET.SubElement(tr_quantum, "label", kind="guard").text = (
+        f"{running_var} == {idx_ref} && {remaining_arr}[{idx_ref}] > 0 && slice == 1"
+    )
+    ET.SubElement(tr_quantum, "label", kind="assignment").text = (
+        f"slice = 0, {remaining_arr}[{idx_ref}] = {remaining_arr}[{idx_ref}] - 1"
+    )
 
     # Exec --done!--> Idle
     tr_done = ET.SubElement(tpl, "transition")
-    ET.SubElement(tr_done, "source", ref=exe.get("id"))
+    ET.SubElement(tr_done, "source", ref=exec_loc.get("id"))
     ET.SubElement(tr_done, "target", ref=idle.get("id"))
-    ET.SubElement(tr_done, "label", kind="guard").text = f"e == {wcet}"
+    ET.SubElement(tr_done, "label", kind="guard").text = (
+        f"{running_var} == {idx_ref} && {remaining_arr}[{idx_ref}] == 0 && slice == 0"
+    )
     ET.SubElement(tr_done, "label", kind="synchronisation").text = f"done_{comp.name}!"
-    ET.SubElement(tr_done, "label", kind="assignment").text = "x = 0"
+    ET.SubElement(tr_done, "label", kind="assignment").text = "x = 0, slice = 0"
 
-    # Deadline violations (if specified)
+    # Exec --preempt?--> Ready
+    tr_preempt = ET.SubElement(tpl, "transition")
+    ET.SubElement(tr_preempt, "source", ref=exec_loc.get("id"))
+    ET.SubElement(tr_preempt, "target", ref=ready_loc.get("id"))
+    ET.SubElement(tr_preempt, "label", kind="guard").text = (
+        f"{running_var} == {idx_ref} && {remaining_arr}[{idx_ref}] > 0 && slice == 0"
+    )
+    ET.SubElement(tr_preempt, "label", kind="synchronisation").text = f"preempt_{comp.name}?"
+    ET.SubElement(tr_preempt, "label", kind="assignment").text = (
+        f"{ready_arr}[{idx_ref}] = true"
+    )
+
     if bad is not None:
         tr_ready_bad = ET.SubElement(tpl, "transition")
         ET.SubElement(tr_ready_bad, "source", ref=ready_loc.get("id"))
@@ -92,7 +122,7 @@ def emit_component_template(
         ET.SubElement(tr_ready_bad, "label", kind="guard").text = f"x > {deadline}"
 
         tr_exec_bad = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_exec_bad, "source", ref=exe.get("id"))
+        ET.SubElement(tr_exec_bad, "source", ref=exec_loc.get("id"))
         ET.SubElement(tr_exec_bad, "target", ref=bad.get("id"))
         ET.SubElement(tr_exec_bad, "label", kind="guard").text = f"x > {deadline}"
 
@@ -151,9 +181,12 @@ def emit_scheduler_template(
     root: ET.Element,
     components: List[Component],
     priority_map: Dict[str, int],
+    class_map: Dict[str, int],
+    threshold_map: Dict[str, int],
     prefix: str,
 ) -> str:
-    """Fixed-priority scheduler"""
+    """Limited-preemption scheduler with class-aware ordering."""
+
     tpl_name = f"Scheduler_{prefix}"
     tpl = ET.SubElement(root, "template")
     ET.SubElement(tpl, "name").text = tpl_name
@@ -161,13 +194,17 @@ def emit_scheduler_template(
     idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
     ET.SubElement(idle, "name").text = "Idle"
 
+    evaluate = ET.SubElement(tpl, "location", id=f"{tpl_name}_Evaluate")
+    ET.SubElement(evaluate, "name").text = "Evaluate"
+    ET.SubElement(evaluate, "committed")
+
     dispatch = ET.SubElement(tpl, "location", id=f"{tpl_name}_Dispatch")
     ET.SubElement(dispatch, "name").text = "Dispatch"
     ET.SubElement(dispatch, "committed")
 
-    post = ET.SubElement(tpl, "location", id=f"{tpl_name}_Post")
-    ET.SubElement(post, "name").text = "Post"
-    ET.SubElement(post, "committed")
+    preempt = ET.SubElement(tpl, "location", id=f"{tpl_name}_Preempt")
+    ET.SubElement(preempt, "name").text = "Preempt"
+    ET.SubElement(preempt, "committed")
 
     busy = ET.SubElement(tpl, "location", id=f"{tpl_name}_Busy")
     ET.SubElement(busy, "name").text = "Busy"
@@ -175,49 +212,134 @@ def emit_scheduler_template(
     ET.SubElement(tpl, "init", ref=idle.get("id"))
 
     ordered = sorted(
-        components, key=lambda c: (priority_map[c.name], c.name)
+        components,
+        key=lambda c: (class_map.get(c.name, 0), priority_map.get(c.name, 0), c.name),
     )
 
-    ready_terms = [f"ready_{prefix}[IDX_{c.name}]" for c in components]
-    some_ready = " || ".join(ready_terms)
+    ready_arr = f"ready_{prefix}"
     running_var = f"running_{prefix}"
+    next_var = f"next_{prefix}"
+    criticality_arr = f"criticality_{prefix}"
+    thresholds_arr = f"thresholds_{prefix}"
 
-    # Wake the dispatcher whenever a job is released while the CPU is idle
+    ready_terms = [f"{ready_arr}[IDX_{c.name}]" for c in components]
+    some_ready = " || ".join(ready_terms)
+
+    outrank_terms = [
+        f"({ready_arr}[IDX_{c.name}] && {criticality_arr}[IDX_{c.name}] < {thresholds_arr}[{running_var}])"
+        for c in components
+    ]
+    outrank_expr = " || ".join(outrank_terms)
+
+    # Idle reacts to releases and queued work
     for comp in components:
         tr_rel = ET.SubElement(tpl, "transition")
         ET.SubElement(tr_rel, "source", ref=idle.get("id"))
-        ET.SubElement(tr_rel, "target", ref=dispatch.get("id"))
+        ET.SubElement(tr_rel, "target", ref=evaluate.get("id"))
         ET.SubElement(tr_rel, "label", kind="synchronisation").text = (
             f"release_{comp.name}?"
         )
 
-    # Dispatch transitions (committed – pick highest-priority ready job)
-    for i, comp in enumerate(ordered):
-        guard_terms = [f"{running_var} == -1", f"ready_{prefix}[IDX_{comp.name}]"]
-        for prev in ordered[:i]:
-            guard_terms.append(f"!ready_{prefix}[IDX_{prev.name}]")
+    if some_ready:
+        tr_idle_eval = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_idle_eval, "source", ref=idle.get("id"))
+        ET.SubElement(tr_idle_eval, "target", ref=evaluate.get("id"))
+        ET.SubElement(tr_idle_eval, "label", kind="guard").text = some_ready
 
+    # Evaluate → Idle (no work)
+    if some_ready:
+        idle_guard = f"{running_var} == -1 && !({some_ready})"
+    else:
+        idle_guard = f"{running_var} == -1"
+    tr_eval_idle = ET.SubElement(tpl, "transition")
+    ET.SubElement(tr_eval_idle, "source", ref=evaluate.get("id"))
+    ET.SubElement(tr_eval_idle, "target", ref=idle.get("id"))
+    ET.SubElement(tr_eval_idle, "label", kind="guard").text = idle_guard
+    ET.SubElement(tr_eval_idle, "label", kind="assignment").text = f"{next_var} = -1"
+
+    # Dispatch highest-ranked ready job when CPU idle
+    for i, comp in enumerate(ordered):
+        guard_terms = [f"{running_var} == -1", f"{ready_arr}[IDX_{comp.name}]"]
+        for prev in ordered[:i]:
+            guard_terms.append(f"!{ready_arr}[IDX_{prev.name}]")
         tr = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr, "source", ref=dispatch.get("id"))
-        ET.SubElement(tr, "target", ref=busy.get("id"))
+        ET.SubElement(tr, "source", ref=evaluate.get("id"))
+        ET.SubElement(tr, "target", ref=dispatch.get("id"))
         ET.SubElement(tr, "label", kind="guard").text = " && ".join(guard_terms)
-        ET.SubElement(tr, "label", kind="synchronisation").text = f"start_{comp.name}!"
         ET.SubElement(tr, "label", kind="assignment").text = (
-            f"{running_var} = IDX_{comp.name}, ready_{prefix}[IDX_{comp.name}] = false"
+            f"{next_var} = IDX_{comp.name}"
         )
 
-    if some_ready:
-        # If somehow the dispatcher wakes without a pending job, fall back to idle
-        tr_disp_idle = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_disp_idle, "source", ref=dispatch.get("id"))
-        ET.SubElement(tr_disp_idle, "target", ref=idle.get("id"))
-        ET.SubElement(tr_disp_idle, "label", kind="guard").text = f"!({some_ready})"
+    # Preemption when an eligible job outranks the running task
+    for i, comp in enumerate(ordered):
+        guard_terms = [
+            f"{running_var} != -1",
+            f"{ready_arr}[IDX_{comp.name}]",
+            f"{criticality_arr}[IDX_{comp.name}] < {thresholds_arr}[{running_var}]",
+        ]
+        for prev in ordered[:i]:
+            guard_terms.append(f"!{ready_arr}[IDX_{prev.name}]")
+        tr = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr, "source", ref=evaluate.get("id"))
+        ET.SubElement(tr, "target", ref=preempt.get("id"))
+        ET.SubElement(tr, "label", kind="guard").text = " && ".join(guard_terms)
+        ET.SubElement(tr, "label", kind="assignment").text = (
+            f"{next_var} = IDX_{comp.name}"
+        )
 
-    # Completion transitions (Busy → committed post-processing
+    # Continue running if no preemption candidate exists
+    tr_eval_busy = ET.SubElement(tpl, "transition")
+    ET.SubElement(tr_eval_busy, "source", ref=evaluate.get("id"))
+    ET.SubElement(tr_eval_busy, "target", ref=busy.get("id"))
+    guard_terms = [f"{running_var} != -1"]
+    if outrank_expr:
+        guard_terms.append(f"!({outrank_expr})")
+    ET.SubElement(tr_eval_busy, "label", kind="guard").text = " && ".join(guard_terms)
+    ET.SubElement(tr_eval_busy, "label", kind="assignment").text = f"{next_var} = -1"
+
+    # Preemption signalling to the current task
+    for comp in components:
+        tr_pre = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_pre, "source", ref=preempt.get("id"))
+        ET.SubElement(tr_pre, "target", ref=dispatch.get("id"))
+        ET.SubElement(tr_pre, "label", kind="guard").text = (
+            f"{running_var} == IDX_{comp.name}"
+        )
+        ET.SubElement(tr_pre, "label", kind="synchronisation").text = (
+            f"preempt_{comp.name}!"
+        )
+        ET.SubElement(tr_pre, "label", kind="assignment").text = (
+            f"{ready_arr}[IDX_{comp.name}] = true, {running_var} = -1"
+        )
+
+    # Dispatch selected job
+    for comp in components:
+        tr_dispatch = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_dispatch, "source", ref=dispatch.get("id"))
+        ET.SubElement(tr_dispatch, "target", ref=busy.get("id"))
+        ET.SubElement(tr_dispatch, "label", kind="guard").text = (
+            f"{next_var} == IDX_{comp.name}"
+        )
+        ET.SubElement(tr_dispatch, "label", kind="synchronisation").text = (
+            f"start_{comp.name}!"
+        )
+        ET.SubElement(tr_dispatch, "label", kind="assignment").text = (
+            f"{running_var} = IDX_{comp.name}, {ready_arr}[IDX_{comp.name}] = false, {next_var} = -1"
+        )
+
+    # Busy state reacts to new releases and completions
+    for comp in components:
+        tr_busy_rel = ET.SubElement(tpl, "transition")
+        ET.SubElement(tr_busy_rel, "source", ref=busy.get("id"))
+        ET.SubElement(tr_busy_rel, "target", ref=evaluate.get("id"))
+        ET.SubElement(tr_busy_rel, "label", kind="synchronisation").text = (
+            f"release_{comp.name}?"
+        )
+
     for comp in components:
         tr_done = ET.SubElement(tpl, "transition")
         ET.SubElement(tr_done, "source", ref=busy.get("id"))
-        ET.SubElement(tr_done, "target", ref=post.get("id"))
+        ET.SubElement(tr_done, "target", ref=evaluate.get("id"))
         ET.SubElement(tr_done, "label", kind="synchronisation").text = (
             f"done_{comp.name}?"
         )
@@ -225,24 +347,8 @@ def emit_scheduler_template(
             f"{running_var} == IDX_{comp.name}"
         )
         ET.SubElement(tr_done, "label", kind="assignment").text = (
-            f"{running_var} = -1"
+            f"{running_var} = -1, {next_var} = -1"
         )
-
-    if some_ready:
-        tr_post_dispatch = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_post_dispatch, "source", ref=post.get("id"))
-        ET.SubElement(tr_post_dispatch, "target", ref=dispatch.get("id"))
-        ET.SubElement(tr_post_dispatch, "label", kind="guard").text = some_ready
-
-        tr_post_idle = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_post_idle, "source", ref=post.get("id"))
-        ET.SubElement(tr_post_idle, "target", ref=idle.get("id"))
-        ET.SubElement(tr_post_idle, "label", kind="guard").text = f"!({some_ready})"
-    else:
-        # no components – treat post as empty and drop to idle
-        tr_post_idle = ET.SubElement(tpl, "transition")
-        ET.SubElement(tr_post_idle, "source", ref=post.get("id"))
-        ET.SubElement(tr_post_idle, "target", ref=idle.get("id"))
 
     return tpl_name
 

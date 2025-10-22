@@ -40,6 +40,20 @@ class ModelBuilder:
         global_decl = ET.SubElement(nta, "declaration")
 
         components = list(model.components.values())
+        cpu_cfg = getattr(model, "cpu", None)
+        configured_order: list[str] = []
+        if cpu_cfg and getattr(cpu_cfg, "class_order", None):
+            configured_order = [cls for cls in cpu_cfg.class_order if cls]
+
+        seen_classes = set(configured_order)
+        for comp in components:
+            cls = getattr(comp, "criticality_class", None)
+            if cls and cls not in seen_classes:
+                configured_order.append(cls)
+                seen_classes.add(cls)
+
+        class_rank_map = {cls: idx for idx, cls in enumerate(configured_order)}
+        default_class_rank = len(configured_order)
         group_data: Dict[str, Dict[str, object]] = {}
         component_prefix: Dict[str, str] = {}
         component_index: Dict[str, int] = {}
@@ -53,16 +67,45 @@ class ModelBuilder:
         for prefix, data in group_data.items():
             comps: List[Component] = data["components"]  # type: ignore[assignment]
             prio_map: Dict[str, int] = {}
+            class_map: Dict[str, int] = {}
+            threshold_map: Dict[str, int] = {}
+            wcet_map: Dict[str, int] = {}
             for idx, comp in enumerate(comps):
                 component_index[comp.name] = idx
                 prio_map[comp.name] = (
                     comp.priority if comp.priority is not None else 1000 + idx
                 )
+                cls = getattr(comp, "criticality_class", None)
+                rank = class_rank_map.get(cls, default_class_rank)
+                class_map[comp.name] = rank
+
+                threshold_label = getattr(comp, "preemption_threshold", None)
+                if threshold_label is None:
+                    threshold_label = cls
+                if threshold_label is not None and threshold_label not in class_rank_map:
+                    class_rank_map[threshold_label] = len(class_rank_map)
+                    configured_order.append(threshold_label)
+                    default_class_rank = len(class_rank_map)
+                threshold_rank = class_rank_map.get(threshold_label, rank)
+                threshold_map[comp.name] = threshold_rank
+                comp.preemption_threshold = threshold_label
+
+                wcet_val = (
+                        getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None)
+                )
+                wcet_map[comp.name] = to_ms(wcet_val) or 0
             data["prio_map"] = prio_map
+            data["class_map"] = class_map
+            data["threshold_map"] = threshold_map
+            data["wcet_map"] = wcet_map
+
+        if cpu_cfg is not None:
+            cpu_cfg.class_order = configured_order
+
 
         decl_parts: list[str] = []
         for comp in components:
-            decl_parts.append(f"broadcast chan start_{comp.name}, done_{comp.name};")
+            decl_parts.append(f"broadcast chan start_{comp.name}, done_{comp.name}, preempt_{comp.name};")
         for comp in components:
             decl_parts.append(f"broadcast chan release_{comp.name};")
 
@@ -84,6 +127,25 @@ class ModelBuilder:
             )
             decl_parts.append(f"bool ready_{prefix}[NUM_COMPONENTS_{prefix}];")
             decl_parts.append(f"int running_{prefix} = -1;")
+            class_map: Dict[str, int] = data["class_map"]  # type: ignore[assignment]
+            class_list = ", ".join(str(class_map[comp.name]) for comp in comps)
+            decl_parts.append(
+                f"int criticality_{prefix}[NUM_COMPONENTS_{prefix}] = {{{class_list}}};"
+            )
+            threshold_map: Dict[str, int] = data["threshold_map"]  # type: ignore[assignment]
+            threshold_list = ", ".join(
+                str(threshold_map[comp.name]) for comp in comps
+            )
+            decl_parts.append(
+                f"int thresholds_{prefix}[NUM_COMPONENTS_{prefix}] = {{{threshold_list}}};"
+            )
+            wcet_map: Dict[str, int] = data["wcet_map"]  # type: ignore[assignment]
+            wcet_list = ", ".join(str(wcet_map[comp.name]) for comp in comps)
+            decl_parts.append(
+                f"const int WCET_{prefix}[NUM_COMPONENTS_{prefix}] = {{{wcet_list}}};"
+            )
+            decl_parts.append(f"int remaining_{prefix}[NUM_COMPONENTS_{prefix}];")
+            decl_parts.append(f"int next_{prefix} = -1;")
 
         global_decl.text = "\n    " + "\n    ".join(decl_parts) + "\n  " if decl_parts else "\n  "
 
@@ -156,10 +218,14 @@ class ModelBuilder:
             if not comps:
                 continue
             prio_map: Dict[str, int] = data["prio_map"]  # type: ignore[assignment]
+            class_map: Dict[str, int] = data["class_map"]  # type: ignore[assignment]
+            threshold_map: Dict[str, int] = data["threshold_map"]  # type: ignore[assignment]
             sched_tpl = emit_scheduler_template(
                 nta,
                 comps,
                 prio_map,
+                class_map,
+                threshold_map,
                 prefix,
             )
             sys_inst.append(f"S_{prefix} = {sched_tpl}();")
