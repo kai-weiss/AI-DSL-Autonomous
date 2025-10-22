@@ -55,5 +55,6 @@ class Model:
     properties: dict[str, str] = field(default_factory=dict)
     optimisation: OptimisationSpec | None = None
     cpu_attrs: list[tuple[str, str]] = field(default_factory=list)
+    cpu: CpuConfig | None = None
     vehicles: dict[str, list[str]] = field(default_factory=dict)
     vehicle_order: list[str] = field(default_factory=list)
