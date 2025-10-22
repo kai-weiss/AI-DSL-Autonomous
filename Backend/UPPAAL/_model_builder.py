@@ -55,6 +55,7 @@ class ModelBuilder:
         class_rank_map = {cls: idx for idx, cls in enumerate(configured_order)}
         default_class_rank = len(configured_order)
         group_data: Dict[str, Dict[str, object]] = {}
+        wcet_lookup: Dict[str, int] = {}
         component_prefix: Dict[str, str] = {}
         component_index: Dict[str, int] = {}
 
@@ -94,6 +95,7 @@ class ModelBuilder:
                         getattr(comp, "wcet_ms", None) or getattr(comp, "wcet", None)
                 )
                 wcet_map[comp.name] = to_ms(wcet_val) or 0
+                wcet_lookup[comp.name] = wcet_map[comp.name]
             data["prio_map"] = prio_map
             data["class_map"] = class_map
             data["threshold_map"] = threshold_map
@@ -273,6 +275,7 @@ class ModelBuilder:
                     int(m_pl.group("val")),
                     start_sync,
                     conn_budget,
+                    wcet_lookup,
                 )
                 inst = f"I_{tpl}"
                 sys_inst.append(f"{inst} = {tpl}();")

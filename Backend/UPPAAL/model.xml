@@ -38,7 +38,7 @@
     int running_B = -1;
     int criticality_B[NUM_COMPONENTS_B] = {0, 1, 1, 1, 1};
     int thresholds_B[NUM_COMPONENTS_B] = {0, 1, 1, 1, 1};
-    const int WCET_B[NUM_COMPONENTS_B] = {10, 2, 2, 10, 25};
+    const int WCET_B[NUM_COMPONENTS_B] = {10, 2, 2, 20, 25};
     int remaining_B[NUM_COMPONENTS_B];
     int next_B = -1;
   </declaration>
@@ -984,6 +984,181 @@ clock slice;</declaration>
       <label kind="assignment">running_B = -1, next_B = -1</label>
     </transition>
   </template>
+  <template>
+    <name>PipeObs_EndToEndLatency</name>
+    <declaration>clock t; clock e;</declaration>
+    <location id="PipeObs_EndToEndLatency_Idle">
+      <name>Idle</name>
+    </location>
+    <location id="PipeObs_EndToEndLatency_PermissionReqTx_B">
+      <name>Wait_PermissionReqTx_B</name>
+      <label kind="invariant">t &lt;= 11</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_AckHandler_A">
+      <name>Wait_AckHandler_A</name>
+      <label kind="invariant">t &lt;= 21</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_PermissionAckRx_B">
+      <name>Wait_PermissionAckRx_B</name>
+      <label kind="invariant">t &lt;= 31</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_TrajectoryPlanner_B">
+      <name>Wait_TrajectoryPlanner_B</name>
+      <label kind="invariant">t &lt;= 54</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Controller_B">
+      <name>Wait_Controller_B</name>
+      <label kind="invariant">t &lt;= 179</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A">
+      <name>Conn_PermissionReqTx_B_to_AckHandler_A</name>
+      <label kind="invariant">t &lt;= 19 &amp;&amp; e &lt;= 8</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Conn_AckHandler_A_to_PermissionAckRx_B">
+      <name>Conn_AckHandler_A_to_PermissionAckRx_B</name>
+      <label kind="invariant">t &lt;= 29 &amp;&amp; e &lt;= 8</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B">
+      <name>Conn_PermissionAckRx_B_to_TrajectoryPlanner_B</name>
+      <label kind="invariant">t &lt;= 34 &amp;&amp; e &lt;= 3</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B">
+      <name>Conn_TrajectoryPlanner_B_to_Controller_B</name>
+      <label kind="invariant">t &lt;= 154 &amp;&amp; e &lt;= 100</label>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Bad">
+      <name>bad</name>
+    </location>
+    <location id="PipeObs_EndToEndLatency_Done">
+      <name>Done</name>
+    </location>
+    <init ref="PipeObs_EndToEndLatency_Idle" />
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Idle" />
+      <target ref="PipeObs_EndToEndLatency_PermissionReqTx_B" />
+      <label kind="synchronisation">start_PermissionReqTx_B?</label>
+      <label kind="assignment">t = 0</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_PermissionReqTx_B" />
+      <target ref="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A" />
+      <label kind="synchronisation">done_PermissionReqTx_B?</label>
+      <label kind="assignment">e = 0</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">e == 8</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A" />
+      <target ref="PipeObs_EndToEndLatency_AckHandler_A" />
+      <label kind="synchronisation">start_AckHandler_A?</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_AckHandler_A" />
+      <target ref="PipeObs_EndToEndLatency_Conn_AckHandler_A_to_PermissionAckRx_B" />
+      <label kind="synchronisation">done_AckHandler_A?</label>
+      <label kind="assignment">e = 0</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_AckHandler_A_to_PermissionAckRx_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">e == 8</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_AckHandler_A_to_PermissionAckRx_B" />
+      <target ref="PipeObs_EndToEndLatency_PermissionAckRx_B" />
+      <label kind="synchronisation">start_PermissionAckRx_B?</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_PermissionAckRx_B" />
+      <target ref="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B" />
+      <label kind="synchronisation">done_PermissionAckRx_B?</label>
+      <label kind="assignment">e = 0</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">e == 3</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B" />
+      <target ref="PipeObs_EndToEndLatency_TrajectoryPlanner_B" />
+      <label kind="synchronisation">start_TrajectoryPlanner_B?</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_TrajectoryPlanner_B" />
+      <target ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
+      <label kind="synchronisation">done_TrajectoryPlanner_B?</label>
+      <label kind="assignment">e = 0</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">e == 100</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
+      <target ref="PipeObs_EndToEndLatency_Controller_B" />
+      <label kind="synchronisation">start_Controller_B?</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Controller_B" />
+      <target ref="PipeObs_EndToEndLatency_Done" />
+      <label kind="synchronisation">done_Controller_B?</label>
+      <label kind="guard">t &lt;= 179</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_PermissionReqTx_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 11</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_AckHandler_A" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 21</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_PermissionAckRx_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 31</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_TrajectoryPlanner_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 54</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Controller_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 179</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 19</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_AckHandler_A_to_PermissionAckRx_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 29</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 34</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
+      <target ref="PipeObs_EndToEndLatency_Bad" />
+      <label kind="guard">t == 154</label>
+    </transition>
+    <transition>
+      <source ref="PipeObs_EndToEndLatency_Done" />
+      <target ref="PipeObs_EndToEndLatency_Idle" />
+    </transition>
+  </template>
   <system>
     P_InteriorLight_A = InteriorLight_A();
     P_AckHandler_A = AckHandler_A();
@@ -1001,6 +1176,7 @@ clock slice;</declaration>
     I_Env_PermissionReqTx_B = Env_PermissionReqTx_B();
     S_A = Scheduler_A();
     S_B = Scheduler_B();
-    system P_InteriorLight_A, P_AckHandler_A, P_Crash_B, P_PermissionReqTx_B, P_PermissionAckRx_B, P_TrajectoryPlanner_B, P_Controller_B, T_InteriorLight_A, D_Conn_PermissionReqTx_B_to_AckHandler_A, D_Conn_AckHandler_A_to_PermissionAckRx_B, D_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B, D_Conn_TrajectoryPlanner_B_to_Controller_B, I_Env_Crash_B, I_Env_PermissionReqTx_B, S_A, S_B;
+    I_PipeObs_EndToEndLatency = PipeObs_EndToEndLatency();
+    system P_InteriorLight_A, P_AckHandler_A, P_Crash_B, P_PermissionReqTx_B, P_PermissionAckRx_B, P_TrajectoryPlanner_B, P_Controller_B, T_InteriorLight_A, D_Conn_PermissionReqTx_B_to_AckHandler_A, D_Conn_AckHandler_A_to_PermissionAckRx_B, D_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B, D_Conn_TrajectoryPlanner_B_to_Controller_B, I_Env_Crash_B, I_Env_PermissionReqTx_B, S_A, S_B, I_PipeObs_EndToEndLatency;
   </system>
 </nta>

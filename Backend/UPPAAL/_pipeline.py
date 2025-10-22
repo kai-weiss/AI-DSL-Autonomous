@@ -28,6 +28,7 @@ def emit_pipeline_observer(
     bound_ms: int,
     start_sync: str,
     conn_budget: Dict[Tuple[str, str], int],
+    wcet_map: Dict[str, int],
 ) -> str:
     base = re.sub(r"\W+", "_", prop_name)
     tpl_name = f"PipeObs_{base}"
@@ -42,12 +43,22 @@ def emit_pipeline_observer(
         except Exception:
             entry_budget = 0
 
-    total_budget = entry_budget
-    for i in range(len(seq) - 1):
-        curr, nxt = seq[i], seq[i + 1]
-        total_budget += conn_budget.get((curr, nxt), 0)
+    n = len(seq)
 
-    eff_bound = max(bound_ms - total_budget, 0)
+    # Suffix aggregates for budgets and execution times ------------------
+    edge_budget: list[int] = [0] * max(n - 1, 0)
+    for i in range(n - 1):
+        edge_budget[i] = conn_budget.get((seq[i], seq[i + 1]), 0)
+
+    future_budget: list[int] = [0] * (n + 1)
+    for i in range(n - 2, -1, -1):
+        future_budget[i] = future_budget[i + 1] + edge_budget[i]
+
+    future_exec: list[int] = [0] * (n + 1)
+    for i in range(n - 1, -1, -1):
+        future_exec[i] = future_exec[i + 1] + wcet_map.get(seq[i], 0)
+
+    total_budget = entry_budget + future_budget[0]
 
     tpl = ET.SubElement(root, "template")
     ET.SubElement(tpl, "name").text = tpl_name
@@ -60,13 +71,14 @@ def emit_pipeline_observer(
     # For each component we create a location where we wait
     # for its completion; the adjusted end-to-end bound applies.
     wait_loc: dict[str, ET.Element] = {}
-    time_guard_locs: list[ET.Element] = []
-    for comp in seq:
+    time_guard_locs: list[tuple[ET.Element, int]] = []
+    for idx, comp in enumerate(seq):
         loc = ET.SubElement(tpl, "location", id=f"{tpl_name}_{comp}")
         ET.SubElement(loc, "name").text = f"Wait_{comp}"
-        ET.SubElement(loc, "label", kind="invariant").text = f"t <= {eff_bound}"
+        limit = max(bound_ms - future_budget[idx] - future_exec[idx + 1], 0)
+        ET.SubElement(loc, "label", kind="invariant").text = f"t <= {limit}"
         wait_loc[comp] = loc
-        time_guard_locs.append(loc)
+        time_guard_locs.append((loc, limit))
 
     # For each pipeline edge create an intermediate wait location
     # this integrates periods and connection latency budgets
@@ -78,12 +90,13 @@ def emit_pipeline_observer(
         )
         ET.SubElement(conn, "name").text = f"Conn_{curr}_to_{nxt}"
         budget = conn_budget.get((curr, nxt), 0)
-        inv_terms = [f"t <= {eff_bound}"]
+        limit = max(bound_ms - future_budget[i + 1] - future_exec[i + 1], 0)
+        inv_terms = [f"t <= {limit}"]
         if budget > 0:
             inv_terms.append(f"e <= {budget}")
         ET.SubElement(conn, "label", kind="invariant").text = " && ".join(inv_terms)
         conn_loc[(curr, nxt)] = conn
-        time_guard_locs.append(conn)
+        time_guard_locs.append((conn, limit))
 
     bad = ET.SubElement(tpl, "location", id=f"{tpl_name}_Bad")
     ET.SubElement(bad, "name").text = "bad"
@@ -98,13 +111,14 @@ def emit_pipeline_observer(
     # If the pipeline starts on a predecessors done, we must first
     # wait for start? before waiting for done?.
     if start_sync.strip().startswith("done_"):
+        entry_limit = max(bound_ms - total_budget - future_exec[0], 0)
         # reset e
         tr0 = ET.SubElement(tpl, "transition")
         ET.SubElement(tr0, "source", ref=idle.get("id"))
         entry_conn_id = f"{tpl_name}_Conn_ENTRY_to_{first}"
         entry_conn = ET.SubElement(tpl, "location", id=entry_conn_id)
         ET.SubElement(entry_conn, "name").text = f"Conn_ENTRY_to_{first}"
-        entry_inv_terms = [f"t <= {eff_bound}"]
+        entry_inv_terms = [f"t <= {entry_limit}"]
         if entry_budget > 0:
             entry_inv_terms.append(f"e <= {entry_budget}")
             tr0b_violate = ET.SubElement(tpl, "transition")
@@ -116,7 +130,7 @@ def emit_pipeline_observer(
         ET.SubElement(entry_conn, "label", kind="invariant").text = " && ".join(
             entry_inv_terms
         )
-        time_guard_locs.append(entry_conn)
+        time_guard_locs.append((entry_conn, entry_limit))
         ET.SubElement(tr0, "target", ref=entry_conn_id)
         ET.SubElement(tr0, "label", kind="synchronisation").text = start_sync
         ET.SubElement(tr0, "label", kind="assignment").text = "t = 0, e = 0"
@@ -164,14 +178,14 @@ def emit_pipeline_observer(
     ET.SubElement(tr_done, "source", ref=wait_loc[last].get("id"))
     ET.SubElement(tr_done, "target", ref=done.get("id"))
     ET.SubElement(tr_done, "label", kind="synchronisation").text = f"done_{last}?"
-    ET.SubElement(tr_done, "label", kind="guard").text = f"t <= {eff_bound}"
+    ET.SubElement(tr_done, "label", kind="guard").text = f"t <= {bound_ms}"
 
     # Global timeout from every location where time may elapse
-    for loc in time_guard_locs:
+    for loc, limit in time_guard_locs:
         tr_to_bad = ET.SubElement(tpl, "transition")
         ET.SubElement(tr_to_bad, "source", ref=loc.get("id"))
         ET.SubElement(tr_to_bad, "target", ref=bad.get("id"))
-        ET.SubElement(tr_to_bad, "label", kind="guard").text = f"t == {eff_bound}"
+        ET.SubElement(tr_to_bad, "label", kind="guard").text = f"t == {limit}"
 
     # Allow re‑use
     tr_reset = ET.SubElement(tpl, "transition")

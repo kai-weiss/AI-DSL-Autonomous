@@ -72,12 +72,17 @@ SYSTEM CooperativeOvertaking {
     CONNECT PermissionAck: A.AckHandler_A.output -> B.PermissionAckRx_B.input { latency_budget = 8ms; }
 
     // Internal connections on vehicle B
-    CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input { latency_budget = 2ms; }
+    CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input { latency_budget = 3ms; }
     CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input { latency_budget = 100ms; }
 
 
     PROPERTY EndToEndLatency:
-      "PIPELINE WITHIN 160ms";
+      "PIPELINE PermissionReqTx_B
+               -> AckHandler_A
+               -> PermissionAckRx_B
+               -> TrajectoryPlanner_B
+               -> Controller_B
+       WITHIN 169ms";
 
     OPTIMISATION {
         VARIABLES {
