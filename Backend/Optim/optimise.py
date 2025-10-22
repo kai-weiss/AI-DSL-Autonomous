@@ -118,9 +118,28 @@ def emit_model(model: Model) -> str:
     system_name = getattr(model, "system_name", None) or "System"
     lines.append(f"SYSTEM {system_name} {{")
 
-    if getattr(model, "cpu_attrs", None):
+    cpu_items: list[tuple[str, str]] = []
+    cpu_cfg = getattr(model, "cpu", None)
+    if cpu_cfg is not None:
+        scheduler = cpu_cfg.scheduler or cpu_cfg.attributes.get("scheduler")
+        if scheduler:
+            cpu_items.append(("scheduler", scheduler))
+        if cpu_cfg.class_order:
+            order_txt = "[ " + " > ".join(cpu_cfg.class_order) + " ]"
+            cpu_items.append(("class_order", order_txt))
+        elif "class_order" in cpu_cfg.attributes:
+            cpu_items.append(("class_order", cpu_cfg.attributes["class_order"]))
+
+        for key, value in cpu_cfg.attributes.items():
+            if key in {"scheduler", "class_order"}:
+                continue
+            cpu_items.append((key, str(value)))
+    elif getattr(model, "cpu_attrs", None):
+        cpu_items = [(k, str(v)) for k, v in model.cpu_attrs]
+
+    if cpu_items:
         lines.append("    CPU {")
-        for key, value in model.cpu_attrs:
+        for key, value in cpu_items:
             lines.append(f"        {key} = {value};")
         lines.append("    }")
         lines.append("")
@@ -137,6 +156,8 @@ def emit_model(model: Model) -> str:
             block.append(f"{indent}    WCET = {_ms(comp.wcet)};")
         if comp.priority is not None:
             block.append(f"{indent}    priority = {comp.priority};")
+        if getattr(comp, "criticality_class", None) is not None:
+            block.append(f"{indent}    class = {comp.criticality_class};")
         block.append(f"{indent}}}")
         return block
 
