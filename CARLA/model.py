@@ -50,6 +50,8 @@ class ComponentSpec:
     behaviour: str | None = None
     config: Dict[str, Any] = field(default_factory=dict)
     vehicle: str | None = None
+    criticality_class: str | None = None
+    preemption_threshold: str | None = None
 
 
 @dataclass(slots=True)

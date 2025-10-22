@@ -97,12 +97,18 @@ def _component_from_payload(name: str, payload: Mapping[str, Any]) -> ComponentS
     priority = _parse_int(payload.get("priority"))
     behaviour = payload.get("behaviour") or payload.get("behavior")
     vehicle = payload.get("vehicle")
+    criticality = payload.get("criticality_class") or payload.get("class")
+    threshold = payload.get("preemption_threshold")
 
     config: Dict[str, Any] = {}
     if isinstance(payload.get("config"), Mapping):
         config.update(payload["config"])  # type: ignore[index]
 
-    known_keys = {"name", "period", "deadline", "wcet", "priority", "behaviour", "behavior", "vehicle", "config"}
+    known_keys = {
+        "name", "period", "deadline", "wcet",
+        "priority", "behaviour", "behavior", "vehicle",
+        "config", "criticality_class", "class", "preemption_threshold",
+    }
     for key, value in payload.items():
         if key in known_keys:
             continue
@@ -117,6 +123,8 @@ def _component_from_payload(name: str, payload: Mapping[str, Any]) -> ComponentS
         behaviour=str(behaviour) if behaviour else None,
         config=config,
         vehicle=str(vehicle) if vehicle else None,
+        criticality_class=str(criticality) if criticality else None,
+        preemption_threshold=str(threshold) if threshold else None,
     )
 
 
