@@ -125,6 +125,15 @@ class RoboticsListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by RoboticsParser#classHierarchy.
+    def enterClassHierarchy(self, ctx:RoboticsParser.ClassHierarchyContext):
+        pass
+
+    # Exit a parse tree produced by RoboticsParser#classHierarchy.
+    def exitClassHierarchy(self, ctx:RoboticsParser.ClassHierarchyContext):
+        pass
+
+
     # Enter a parse tree produced by RoboticsParser#systemDecl.
     def enterSystemDecl(self, ctx:RoboticsParser.SystemDeclContext):
         pass

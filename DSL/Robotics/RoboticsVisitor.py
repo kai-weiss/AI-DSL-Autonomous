@@ -74,6 +74,11 @@ class RoboticsVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by RoboticsParser#classHierarchy.
+    def visitClassHierarchy(self, ctx:RoboticsParser.ClassHierarchyContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by RoboticsParser#systemDecl.
     def visitSystemDecl(self, ctx:RoboticsParser.SystemDeclContext):
         return self.visitChildren(ctx)

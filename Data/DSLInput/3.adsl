@@ -4,7 +4,7 @@ SYSTEM CooperativeOvertaking {
     //Global scheduling assumptions
     CPU {
         cores      = 1;
-        scheduler  = PREEMPTIVE_FP;
+        scheduler  = LIMITED_PREEMPTIVE_FP;
         class_order  = [ SafetyCritical > Chain > BestEffort ];
     }
 

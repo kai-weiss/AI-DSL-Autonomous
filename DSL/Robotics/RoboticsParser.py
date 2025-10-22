@@ -10,106 +10,116 @@ else:
 
 def serializedATN():
     return [
-        4,1,47,295,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,
+        4,1,52,320,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,
         6,2,7,7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,13,
         2,14,7,14,2,15,7,15,2,16,7,16,2,17,7,17,2,18,7,18,2,19,7,19,2,20,
         7,20,2,21,7,21,2,22,7,22,2,23,7,23,2,24,7,24,2,25,7,25,2,26,7,26,
-        2,27,7,27,1,0,5,0,58,8,0,10,0,12,0,61,9,0,1,0,1,0,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,3,1,72,8,1,1,2,1,2,1,2,1,2,1,2,1,2,1,3,1,3,1,3,5,3,
-        83,8,3,10,3,12,3,86,9,3,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,
-        1,4,1,4,3,4,100,8,4,1,5,1,5,1,5,3,5,105,8,5,1,5,1,5,1,5,1,5,3,5,
-        111,8,5,1,6,1,6,1,6,1,6,1,6,1,6,1,6,1,7,1,7,1,7,1,7,1,8,1,8,1,8,
-        1,8,1,8,1,8,1,8,1,8,1,8,5,8,133,8,8,10,8,12,8,136,9,8,1,8,3,8,139,
-        8,8,1,9,1,9,1,9,1,9,5,9,145,8,9,10,9,12,9,148,9,9,1,9,1,9,1,10,1,
-        10,1,10,5,10,155,8,10,10,10,12,10,158,9,10,1,10,1,10,1,11,1,11,1,
-        11,1,11,1,11,1,12,1,12,1,12,1,12,5,12,171,8,12,10,12,12,12,174,9,
-        12,1,12,1,12,1,13,1,13,1,13,1,13,1,13,1,14,1,14,1,14,3,14,186,8,
-        14,1,15,1,15,1,15,5,15,191,8,15,10,15,12,15,194,9,15,1,16,1,16,1,
-        16,1,17,1,17,1,17,1,17,1,17,4,17,204,8,17,11,17,12,17,205,1,17,1,
-        17,1,17,1,17,4,17,212,8,17,11,17,12,17,213,1,17,1,17,1,17,1,17,4,
-        17,220,8,17,11,17,12,17,221,1,17,1,17,1,17,1,18,1,18,1,18,1,18,1,
-        18,1,18,1,18,1,19,1,19,1,19,1,19,1,19,3,19,239,8,19,1,20,1,20,1,
-        20,1,20,1,20,1,20,1,20,1,20,1,21,1,21,1,22,1,22,1,22,1,22,1,23,1,
-        23,1,23,1,23,1,24,1,24,1,24,1,24,1,25,1,25,1,25,1,26,1,26,1,26,1,
-        26,1,26,1,26,1,26,1,26,1,26,1,26,1,26,1,26,1,26,1,26,1,26,5,26,281,
-        8,26,10,26,12,26,284,9,26,1,27,1,27,1,27,1,27,1,27,1,27,1,27,3,27,
-        293,8,27,1,27,0,1,52,28,0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,
-        30,32,34,36,38,40,42,44,46,48,50,52,54,0,7,2,0,23,23,47,47,2,0,7,
-        11,47,47,1,0,31,32,1,0,45,46,1,0,43,44,1,0,37,42,1,0,35,36,298,0,
-        59,1,0,0,0,2,71,1,0,0,0,4,73,1,0,0,0,6,84,1,0,0,0,8,99,1,0,0,0,10,
-        101,1,0,0,0,12,112,1,0,0,0,14,119,1,0,0,0,16,138,1,0,0,0,18,140,
-        1,0,0,0,20,151,1,0,0,0,22,161,1,0,0,0,24,166,1,0,0,0,26,177,1,0,
-        0,0,28,185,1,0,0,0,30,187,1,0,0,0,32,195,1,0,0,0,34,198,1,0,0,0,
-        36,226,1,0,0,0,38,238,1,0,0,0,40,240,1,0,0,0,42,248,1,0,0,0,44,250,
-        1,0,0,0,46,254,1,0,0,0,48,258,1,0,0,0,50,262,1,0,0,0,52,265,1,0,
-        0,0,54,292,1,0,0,0,56,58,3,2,1,0,57,56,1,0,0,0,58,61,1,0,0,0,59,
-        57,1,0,0,0,59,60,1,0,0,0,60,62,1,0,0,0,61,59,1,0,0,0,62,63,5,0,0,
-        1,63,1,1,0,0,0,64,72,3,4,2,0,65,72,3,10,5,0,66,72,3,16,8,0,67,72,
-        3,34,17,0,68,72,3,24,12,0,69,72,3,18,9,0,70,72,3,20,10,0,71,64,1,
-        0,0,0,71,65,1,0,0,0,71,66,1,0,0,0,71,67,1,0,0,0,71,68,1,0,0,0,71,
-        69,1,0,0,0,71,70,1,0,0,0,72,3,1,0,0,0,73,74,5,4,0,0,74,75,5,47,0,
-        0,75,76,5,16,0,0,76,77,3,6,3,0,77,78,5,17,0,0,78,5,1,0,0,0,79,80,
-        3,8,4,0,80,81,5,19,0,0,81,83,1,0,0,0,82,79,1,0,0,0,83,86,1,0,0,0,
-        84,82,1,0,0,0,84,85,1,0,0,0,85,7,1,0,0,0,86,84,1,0,0,0,87,88,5,7,
-        0,0,88,89,5,20,0,0,89,100,3,32,16,0,90,91,5,8,0,0,91,92,5,20,0,0,
-        92,100,3,32,16,0,93,94,5,9,0,0,94,95,5,20,0,0,95,100,3,32,16,0,96,
-        97,5,10,0,0,97,98,5,20,0,0,98,100,5,23,0,0,99,87,1,0,0,0,99,90,1,
-        0,0,0,99,93,1,0,0,0,99,96,1,0,0,0,100,9,1,0,0,0,101,104,5,5,0,0,
-        102,103,5,47,0,0,103,105,5,18,0,0,104,102,1,0,0,0,104,105,1,0,0,
-        0,105,106,1,0,0,0,106,107,3,14,7,0,107,108,5,15,0,0,108,110,3,14,
-        7,0,109,111,3,12,6,0,110,109,1,0,0,0,110,111,1,0,0,0,111,11,1,0,
-        0,0,112,113,5,16,0,0,113,114,5,11,0,0,114,115,5,20,0,0,115,116,3,
-        32,16,0,116,117,5,19,0,0,117,118,5,17,0,0,118,13,1,0,0,0,119,120,
-        3,30,15,0,120,121,5,21,0,0,121,122,5,47,0,0,122,15,1,0,0,0,123,124,
-        5,6,0,0,124,125,5,47,0,0,125,126,5,18,0,0,126,127,5,22,0,0,127,139,
-        5,19,0,0,128,129,5,6,0,0,129,130,5,47,0,0,130,134,5,16,0,0,131,133,
-        3,26,13,0,132,131,1,0,0,0,133,136,1,0,0,0,134,132,1,0,0,0,134,135,
-        1,0,0,0,135,137,1,0,0,0,136,134,1,0,0,0,137,139,5,17,0,0,138,123,
-        1,0,0,0,138,128,1,0,0,0,139,17,1,0,0,0,140,141,5,13,0,0,141,142,
-        5,47,0,0,142,146,5,16,0,0,143,145,3,4,2,0,144,143,1,0,0,0,145,148,
-        1,0,0,0,146,144,1,0,0,0,146,147,1,0,0,0,147,149,1,0,0,0,148,146,
-        1,0,0,0,149,150,5,17,0,0,150,19,1,0,0,0,151,152,5,14,0,0,152,156,
-        5,16,0,0,153,155,3,22,11,0,154,153,1,0,0,0,155,158,1,0,0,0,156,154,
-        1,0,0,0,156,157,1,0,0,0,157,159,1,0,0,0,158,156,1,0,0,0,159,160,
-        5,17,0,0,160,21,1,0,0,0,161,162,5,47,0,0,162,163,5,20,0,0,163,164,
-        7,0,0,0,164,165,5,19,0,0,165,23,1,0,0,0,166,167,5,12,0,0,167,168,
-        5,47,0,0,168,172,5,16,0,0,169,171,3,2,1,0,170,169,1,0,0,0,171,174,
-        1,0,0,0,172,170,1,0,0,0,172,173,1,0,0,0,173,175,1,0,0,0,174,172,
-        1,0,0,0,175,176,5,17,0,0,176,25,1,0,0,0,177,178,5,47,0,0,178,179,
-        5,20,0,0,179,180,3,28,14,0,180,181,5,19,0,0,181,27,1,0,0,0,182,186,
-        3,32,16,0,183,186,3,30,15,0,184,186,5,47,0,0,185,182,1,0,0,0,185,
-        183,1,0,0,0,185,184,1,0,0,0,186,29,1,0,0,0,187,192,5,47,0,0,188,
-        189,5,21,0,0,189,191,5,47,0,0,190,188,1,0,0,0,191,194,1,0,0,0,192,
-        190,1,0,0,0,192,193,1,0,0,0,193,31,1,0,0,0,194,192,1,0,0,0,195,196,
-        5,23,0,0,196,197,5,24,0,0,197,33,1,0,0,0,198,199,5,27,0,0,199,200,
-        5,16,0,0,200,201,5,28,0,0,201,203,5,16,0,0,202,204,3,36,18,0,203,
-        202,1,0,0,0,204,205,1,0,0,0,205,203,1,0,0,0,205,206,1,0,0,0,206,
-        207,1,0,0,0,207,208,5,17,0,0,208,209,5,29,0,0,209,211,5,16,0,0,210,
-        212,3,46,23,0,211,210,1,0,0,0,212,213,1,0,0,0,213,211,1,0,0,0,213,
-        214,1,0,0,0,214,215,1,0,0,0,215,216,5,17,0,0,216,217,5,30,0,0,217,
-        219,5,16,0,0,218,220,3,48,24,0,219,218,1,0,0,0,220,221,1,0,0,0,221,
-        219,1,0,0,0,221,222,1,0,0,0,222,223,1,0,0,0,223,224,5,17,0,0,224,
-        225,5,17,0,0,225,35,1,0,0,0,226,227,3,38,19,0,227,228,5,21,0,0,228,
-        229,3,42,21,0,229,230,5,33,0,0,230,231,3,44,22,0,231,232,5,19,0,
-        0,232,37,1,0,0,0,233,239,3,30,15,0,234,235,5,1,0,0,235,236,3,40,
-        20,0,236,237,5,2,0,0,237,239,1,0,0,0,238,233,1,0,0,0,238,234,1,0,
-        0,0,239,39,1,0,0,0,240,241,3,30,15,0,241,242,5,21,0,0,242,243,5,
-        47,0,0,243,244,5,15,0,0,244,245,3,30,15,0,245,246,5,21,0,0,246,247,
-        5,47,0,0,247,41,1,0,0,0,248,249,7,1,0,0,249,43,1,0,0,0,250,251,3,
-        50,25,0,251,252,5,3,0,0,252,253,3,50,25,0,253,45,1,0,0,0,254,255,
-        7,2,0,0,255,256,5,47,0,0,256,257,5,19,0,0,257,47,1,0,0,0,258,259,
-        5,34,0,0,259,260,3,52,26,0,260,261,5,19,0,0,261,49,1,0,0,0,262,263,
-        5,23,0,0,263,264,5,24,0,0,264,51,1,0,0,0,265,266,6,26,-1,0,266,267,
-        3,54,27,0,267,282,1,0,0,0,268,269,10,4,0,0,269,270,7,3,0,0,270,281,
-        3,52,26,5,271,272,10,3,0,0,272,273,7,4,0,0,273,281,3,52,26,4,274,
-        275,10,2,0,0,275,276,7,5,0,0,276,281,3,52,26,3,277,278,10,1,0,0,
-        278,279,7,6,0,0,279,281,3,52,26,2,280,268,1,0,0,0,280,271,1,0,0,
-        0,280,274,1,0,0,0,280,277,1,0,0,0,281,284,1,0,0,0,282,280,1,0,0,
-        0,282,283,1,0,0,0,283,53,1,0,0,0,284,282,1,0,0,0,285,293,5,23,0,
-        0,286,293,3,50,25,0,287,293,5,47,0,0,288,289,5,1,0,0,289,290,3,52,
-        26,0,290,291,5,2,0,0,291,293,1,0,0,0,292,285,1,0,0,0,292,286,1,0,
-        0,0,292,287,1,0,0,0,292,288,1,0,0,0,293,55,1,0,0,0,20,59,71,84,99,
-        104,110,134,138,146,156,172,185,192,205,213,221,238,280,282,292
+        2,27,7,27,2,28,7,28,1,0,5,0,60,8,0,10,0,12,0,63,9,0,1,0,1,0,1,1,
+        1,1,1,1,1,1,1,1,1,1,1,1,3,1,74,8,1,1,2,1,2,1,2,1,2,1,2,1,2,1,3,1,
+        3,1,3,5,3,85,8,3,10,3,12,3,88,9,3,1,4,1,4,1,4,1,4,1,4,1,4,1,4,1,
+        4,1,4,1,4,1,4,1,4,1,4,1,4,1,4,3,4,105,8,4,1,5,1,5,1,5,3,5,110,8,
+        5,1,5,1,5,1,5,1,5,3,5,116,8,5,1,6,1,6,1,6,1,6,1,6,1,6,1,6,1,7,1,
+        7,1,7,1,7,1,8,1,8,1,8,1,8,1,8,1,8,1,8,1,8,1,8,5,8,138,8,8,10,8,12,
+        8,141,9,8,1,8,3,8,144,8,8,1,9,1,9,1,9,1,9,5,9,150,8,9,10,9,12,9,
+        153,9,9,1,9,1,9,1,10,1,10,1,10,5,10,160,8,10,10,10,12,10,163,9,10,
+        1,10,1,10,1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,11,1,11,
+        1,11,1,11,1,11,1,11,3,11,182,8,11,1,12,1,12,1,12,5,12,187,8,12,10,
+        12,12,12,190,9,12,1,13,1,13,1,13,1,13,5,13,196,8,13,10,13,12,13,
+        199,9,13,1,13,1,13,1,14,1,14,1,14,1,14,1,14,1,15,1,15,1,15,3,15,
+        211,8,15,1,16,1,16,1,16,5,16,216,8,16,10,16,12,16,219,9,16,1,17,
+        1,17,1,17,1,18,1,18,1,18,1,18,1,18,4,18,229,8,18,11,18,12,18,230,
+        1,18,1,18,1,18,1,18,4,18,237,8,18,11,18,12,18,238,1,18,1,18,1,18,
+        1,18,4,18,245,8,18,11,18,12,18,246,1,18,1,18,1,18,1,19,1,19,1,19,
+        1,19,1,19,1,19,1,19,1,20,1,20,1,20,1,20,1,20,3,20,264,8,20,1,21,
+        1,21,1,21,1,21,1,21,1,21,1,21,1,21,1,22,1,22,1,23,1,23,1,23,1,23,
+        1,24,1,24,1,24,1,24,1,25,1,25,1,25,1,25,1,26,1,26,1,26,1,27,1,27,
+        1,27,1,27,1,27,1,27,1,27,1,27,1,27,1,27,1,27,1,27,1,27,1,27,1,27,
+        5,27,306,8,27,10,27,12,27,309,9,27,1,28,1,28,1,28,1,28,1,28,1,28,
+        1,28,3,28,318,8,28,1,28,0,1,54,29,0,2,4,6,8,10,12,14,16,18,20,22,
+        24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,0,7,2,0,28,28,
+        52,52,2,0,7,11,52,52,1,0,36,37,1,0,50,51,1,0,48,49,1,0,42,47,1,0,
+        40,41,326,0,61,1,0,0,0,2,73,1,0,0,0,4,75,1,0,0,0,6,86,1,0,0,0,8,
+        104,1,0,0,0,10,106,1,0,0,0,12,117,1,0,0,0,14,124,1,0,0,0,16,143,
+        1,0,0,0,18,145,1,0,0,0,20,156,1,0,0,0,22,181,1,0,0,0,24,183,1,0,
+        0,0,26,191,1,0,0,0,28,202,1,0,0,0,30,210,1,0,0,0,32,212,1,0,0,0,
+        34,220,1,0,0,0,36,223,1,0,0,0,38,251,1,0,0,0,40,263,1,0,0,0,42,265,
+        1,0,0,0,44,273,1,0,0,0,46,275,1,0,0,0,48,279,1,0,0,0,50,283,1,0,
+        0,0,52,287,1,0,0,0,54,290,1,0,0,0,56,317,1,0,0,0,58,60,3,2,1,0,59,
+        58,1,0,0,0,60,63,1,0,0,0,61,59,1,0,0,0,61,62,1,0,0,0,62,64,1,0,0,
+        0,63,61,1,0,0,0,64,65,5,0,0,1,65,1,1,0,0,0,66,74,3,4,2,0,67,74,3,
+        10,5,0,68,74,3,16,8,0,69,74,3,36,18,0,70,74,3,26,13,0,71,74,3,18,
+        9,0,72,74,3,20,10,0,73,66,1,0,0,0,73,67,1,0,0,0,73,68,1,0,0,0,73,
+        69,1,0,0,0,73,70,1,0,0,0,73,71,1,0,0,0,73,72,1,0,0,0,74,3,1,0,0,
+        0,75,76,5,4,0,0,76,77,5,52,0,0,77,78,5,19,0,0,78,79,3,6,3,0,79,80,
+        5,20,0,0,80,5,1,0,0,0,81,82,3,8,4,0,82,83,5,22,0,0,83,85,1,0,0,0,
+        84,81,1,0,0,0,85,88,1,0,0,0,86,84,1,0,0,0,86,87,1,0,0,0,87,7,1,0,
+        0,0,88,86,1,0,0,0,89,90,5,7,0,0,90,91,5,23,0,0,91,105,3,34,17,0,
+        92,93,5,8,0,0,93,94,5,23,0,0,94,105,3,34,17,0,95,96,5,9,0,0,96,97,
+        5,23,0,0,97,105,3,34,17,0,98,99,5,10,0,0,99,100,5,23,0,0,100,105,
+        5,28,0,0,101,102,5,12,0,0,102,103,5,23,0,0,103,105,5,52,0,0,104,
+        89,1,0,0,0,104,92,1,0,0,0,104,95,1,0,0,0,104,98,1,0,0,0,104,101,
+        1,0,0,0,105,9,1,0,0,0,106,109,5,5,0,0,107,108,5,52,0,0,108,110,5,
+        21,0,0,109,107,1,0,0,0,109,110,1,0,0,0,110,111,1,0,0,0,111,112,3,
+        14,7,0,112,113,5,18,0,0,113,115,3,14,7,0,114,116,3,12,6,0,115,114,
+        1,0,0,0,115,116,1,0,0,0,116,11,1,0,0,0,117,118,5,19,0,0,118,119,
+        5,11,0,0,119,120,5,23,0,0,120,121,3,34,17,0,121,122,5,22,0,0,122,
+        123,5,20,0,0,123,13,1,0,0,0,124,125,3,32,16,0,125,126,5,24,0,0,126,
+        127,5,52,0,0,127,15,1,0,0,0,128,129,5,6,0,0,129,130,5,52,0,0,130,
+        131,5,21,0,0,131,132,5,27,0,0,132,144,5,22,0,0,133,134,5,6,0,0,134,
+        135,5,52,0,0,135,139,5,19,0,0,136,138,3,28,14,0,137,136,1,0,0,0,
+        138,141,1,0,0,0,139,137,1,0,0,0,139,140,1,0,0,0,140,142,1,0,0,0,
+        141,139,1,0,0,0,142,144,5,20,0,0,143,128,1,0,0,0,143,133,1,0,0,0,
+        144,17,1,0,0,0,145,146,5,14,0,0,146,147,5,52,0,0,147,151,5,19,0,
+        0,148,150,3,4,2,0,149,148,1,0,0,0,150,153,1,0,0,0,151,149,1,0,0,
+        0,151,152,1,0,0,0,152,154,1,0,0,0,153,151,1,0,0,0,154,155,5,20,0,
+        0,155,19,1,0,0,0,156,157,5,15,0,0,157,161,5,19,0,0,158,160,3,22,
+        11,0,159,158,1,0,0,0,160,163,1,0,0,0,161,159,1,0,0,0,161,162,1,0,
+        0,0,162,164,1,0,0,0,163,161,1,0,0,0,164,165,5,20,0,0,165,21,1,0,
+        0,0,166,167,5,16,0,0,167,168,5,23,0,0,168,169,5,52,0,0,169,182,5,
+        22,0,0,170,171,5,17,0,0,171,172,5,23,0,0,172,173,5,25,0,0,173,174,
+        3,24,12,0,174,175,5,26,0,0,175,176,5,22,0,0,176,182,1,0,0,0,177,
+        178,5,52,0,0,178,179,5,23,0,0,179,180,7,0,0,0,180,182,5,22,0,0,181,
+        166,1,0,0,0,181,170,1,0,0,0,181,177,1,0,0,0,182,23,1,0,0,0,183,188,
+        5,52,0,0,184,185,5,47,0,0,185,187,5,52,0,0,186,184,1,0,0,0,187,190,
+        1,0,0,0,188,186,1,0,0,0,188,189,1,0,0,0,189,25,1,0,0,0,190,188,1,
+        0,0,0,191,192,5,13,0,0,192,193,5,52,0,0,193,197,5,19,0,0,194,196,
+        3,2,1,0,195,194,1,0,0,0,196,199,1,0,0,0,197,195,1,0,0,0,197,198,
+        1,0,0,0,198,200,1,0,0,0,199,197,1,0,0,0,200,201,5,20,0,0,201,27,
+        1,0,0,0,202,203,5,52,0,0,203,204,5,23,0,0,204,205,3,30,15,0,205,
+        206,5,22,0,0,206,29,1,0,0,0,207,211,3,34,17,0,208,211,3,32,16,0,
+        209,211,5,52,0,0,210,207,1,0,0,0,210,208,1,0,0,0,210,209,1,0,0,0,
+        211,31,1,0,0,0,212,217,5,52,0,0,213,214,5,24,0,0,214,216,5,52,0,
+        0,215,213,1,0,0,0,216,219,1,0,0,0,217,215,1,0,0,0,217,218,1,0,0,
+        0,218,33,1,0,0,0,219,217,1,0,0,0,220,221,5,28,0,0,221,222,5,29,0,
+        0,222,35,1,0,0,0,223,224,5,32,0,0,224,225,5,19,0,0,225,226,5,33,
+        0,0,226,228,5,19,0,0,227,229,3,38,19,0,228,227,1,0,0,0,229,230,1,
+        0,0,0,230,228,1,0,0,0,230,231,1,0,0,0,231,232,1,0,0,0,232,233,5,
+        20,0,0,233,234,5,34,0,0,234,236,5,19,0,0,235,237,3,48,24,0,236,235,
+        1,0,0,0,237,238,1,0,0,0,238,236,1,0,0,0,238,239,1,0,0,0,239,240,
+        1,0,0,0,240,241,5,20,0,0,241,242,5,35,0,0,242,244,5,19,0,0,243,245,
+        3,50,25,0,244,243,1,0,0,0,245,246,1,0,0,0,246,244,1,0,0,0,246,247,
+        1,0,0,0,247,248,1,0,0,0,248,249,5,20,0,0,249,250,5,20,0,0,250,37,
+        1,0,0,0,251,252,3,40,20,0,252,253,5,24,0,0,253,254,3,44,22,0,254,
+        255,5,38,0,0,255,256,3,46,23,0,256,257,5,22,0,0,257,39,1,0,0,0,258,
+        264,3,32,16,0,259,260,5,1,0,0,260,261,3,42,21,0,261,262,5,2,0,0,
+        262,264,1,0,0,0,263,258,1,0,0,0,263,259,1,0,0,0,264,41,1,0,0,0,265,
+        266,3,32,16,0,266,267,5,24,0,0,267,268,5,52,0,0,268,269,5,18,0,0,
+        269,270,3,32,16,0,270,271,5,24,0,0,271,272,5,52,0,0,272,43,1,0,0,
+        0,273,274,7,1,0,0,274,45,1,0,0,0,275,276,3,52,26,0,276,277,5,3,0,
+        0,277,278,3,52,26,0,278,47,1,0,0,0,279,280,7,2,0,0,280,281,5,52,
+        0,0,281,282,5,22,0,0,282,49,1,0,0,0,283,284,5,39,0,0,284,285,3,54,
+        27,0,285,286,5,22,0,0,286,51,1,0,0,0,287,288,5,28,0,0,288,289,5,
+        29,0,0,289,53,1,0,0,0,290,291,6,27,-1,0,291,292,3,56,28,0,292,307,
+        1,0,0,0,293,294,10,4,0,0,294,295,7,3,0,0,295,306,3,54,27,5,296,297,
+        10,3,0,0,297,298,7,4,0,0,298,306,3,54,27,4,299,300,10,2,0,0,300,
+        301,7,5,0,0,301,306,3,54,27,3,302,303,10,1,0,0,303,304,7,6,0,0,304,
+        306,3,54,27,2,305,293,1,0,0,0,305,296,1,0,0,0,305,299,1,0,0,0,305,
+        302,1,0,0,0,306,309,1,0,0,0,307,305,1,0,0,0,307,308,1,0,0,0,308,
+        55,1,0,0,0,309,307,1,0,0,0,310,318,5,28,0,0,311,318,3,52,26,0,312,
+        318,5,52,0,0,313,314,5,1,0,0,314,315,3,54,27,0,315,316,5,2,0,0,316,
+        318,1,0,0,0,317,310,1,0,0,0,317,311,1,0,0,0,317,312,1,0,0,0,317,
+        313,1,0,0,0,318,57,1,0,0,0,22,61,73,86,104,109,115,139,143,151,161,
+        181,188,197,210,217,230,238,246,263,305,307,317
     ]
 
 class RoboticsParser ( Parser ):
@@ -124,8 +134,9 @@ class RoboticsParser ( Parser ):
 
     literalNames = [ "<INVALID>", "'('", "')'", "'..'", "'COMPONENT'", "'CONNECT'", 
                      "'PROPERTY'", "'period'", "'deadline'", "'WCET'", "'priority'", 
-                     "'latency_budget'", "'SYSTEM'", "'VEHICLE'", "'CPU'", 
-                     "'->'", "'{'", "'}'", "':'", "';'", "'='", "'.'", "<INVALID>", 
+                     "'latency_budget'", "'class'", "'SYSTEM'", "'VEHICLE'", 
+                     "'CPU'", "'scheduler'", "'class_order'", "'->'", "'{'", 
+                     "'}'", "':'", "';'", "'='", "'.'", "'['", "']'", "<INVALID>", 
                      "<INVALID>", "'ms'", "<INVALID>", "<INVALID>", "'OPTIMISATION'", 
                      "'VARIABLES'", "'OBJECTIVES'", "'CONSTRAINTS'", "<INVALID>", 
                      "<INVALID>", "'range'", "'assert'", "'&&'", "'||'", 
@@ -134,13 +145,15 @@ class RoboticsParser ( Parser ):
 
     symbolicNames = [ "<INVALID>", "<INVALID>", "<INVALID>", "<INVALID>", 
                       "COMPONENT", "CONNECT", "PROPERTY", "PERIOD", "DEADLINE", 
-                      "WCET", "PRIORITY", "LATENCY_BUDGET", "SYSTEM", "VEHICLE", 
-                      "CPU", "ARROW", "LBRACE", "RBRACE", "COLON", "SEMI", 
-                      "EQUAL", "DOT", "STRING", "INT", "UNIT_MS", "WS", 
-                      "LINE_COMMENT", "OPTIMISATION", "VARIABLES", "OBJECTIVES", 
-                      "CONSTRAINTS", "MINIMISE", "MAXIMISE", "RANGE", "ASSERT", 
-                      "AND", "OR", "EQ", "NEQ", "LE", "GE", "LT", "GT", 
-                      "PLUS", "MINUS", "STAR", "SLASH", "ID" ]
+                      "WCET", "PRIORITY", "LATENCY_BUDGET", "CLASS", "SYSTEM", 
+                      "VEHICLE", "CPU", "SCHEDULER", "CLASS_ORDER", "ARROW", 
+                      "LBRACE", "RBRACE", "COLON", "SEMI", "EQUAL", "DOT", 
+                      "LSQUARE", "RSQUARE", "STRING", "INT", "UNIT_MS", 
+                      "WS", "LINE_COMMENT", "OPTIMISATION", "VARIABLES", 
+                      "OBJECTIVES", "CONSTRAINTS", "MINIMISE", "MAXIMISE", 
+                      "RANGE", "ASSERT", "AND", "OR", "EQ", "NEQ", "LE", 
+                      "GE", "LT", "GT", "PLUS", "MINUS", "STAR", "SLASH", 
+                      "ID" ]
 
     RULE_file = 0
     RULE_statement = 1
@@ -154,30 +167,32 @@ class RoboticsParser ( Parser ):
     RULE_vehicleDecl = 9
     RULE_cpuDecl = 10
     RULE_cpuAttr = 11
-    RULE_systemDecl = 12
-    RULE_propertyField = 13
-    RULE_propertyValue = 14
-    RULE_dottedId = 15
-    RULE_duration = 16
-    RULE_optimisationBlock = 17
-    RULE_variableDecl = 18
-    RULE_targetRef = 19
-    RULE_connectionRef = 20
-    RULE_attrName = 21
-    RULE_rangeSpec = 22
-    RULE_objectiveDecl = 23
-    RULE_constraintDecl = 24
-    RULE_literalDuration = 25
-    RULE_expression = 26
-    RULE_primary = 27
+    RULE_classHierarchy = 12
+    RULE_systemDecl = 13
+    RULE_propertyField = 14
+    RULE_propertyValue = 15
+    RULE_dottedId = 16
+    RULE_duration = 17
+    RULE_optimisationBlock = 18
+    RULE_variableDecl = 19
+    RULE_targetRef = 20
+    RULE_connectionRef = 21
+    RULE_attrName = 22
+    RULE_rangeSpec = 23
+    RULE_objectiveDecl = 24
+    RULE_constraintDecl = 25
+    RULE_literalDuration = 26
+    RULE_expression = 27
+    RULE_primary = 28
 
     ruleNames =  [ "file", "statement", "componentDecl", "componentBody", 
                    "componentAttr", "connectDecl", "connectBody", "endpoint", 
                    "propertyDecl", "vehicleDecl", "cpuDecl", "cpuAttr", 
-                   "systemDecl", "propertyField", "propertyValue", "dottedId", 
-                   "duration", "optimisationBlock", "variableDecl", "targetRef", 
-                   "connectionRef", "attrName", "rangeSpec", "objectiveDecl", 
-                   "constraintDecl", "literalDuration", "expression", "primary" ]
+                   "classHierarchy", "systemDecl", "propertyField", "propertyValue", 
+                   "dottedId", "duration", "optimisationBlock", "variableDecl", 
+                   "targetRef", "connectionRef", "attrName", "rangeSpec", 
+                   "objectiveDecl", "constraintDecl", "literalDuration", 
+                   "expression", "primary" ]
 
     EOF = Token.EOF
     T__0=1
@@ -191,42 +206,47 @@ class RoboticsParser ( Parser ):
     WCET=9
     PRIORITY=10
     LATENCY_BUDGET=11
-    SYSTEM=12
-    VEHICLE=13
-    CPU=14
-    ARROW=15
-    LBRACE=16
-    RBRACE=17
-    COLON=18
-    SEMI=19
-    EQUAL=20
-    DOT=21
-    STRING=22
-    INT=23
-    UNIT_MS=24
-    WS=25
-    LINE_COMMENT=26
-    OPTIMISATION=27
-    VARIABLES=28
-    OBJECTIVES=29
-    CONSTRAINTS=30
-    MINIMISE=31
-    MAXIMISE=32
-    RANGE=33
-    ASSERT=34
-    AND=35
-    OR=36
-    EQ=37
-    NEQ=38
-    LE=39
-    GE=40
-    LT=41
-    GT=42
-    PLUS=43
-    MINUS=44
-    STAR=45
-    SLASH=46
-    ID=47
+    CLASS=12
+    SYSTEM=13
+    VEHICLE=14
+    CPU=15
+    SCHEDULER=16
+    CLASS_ORDER=17
+    ARROW=18
+    LBRACE=19
+    RBRACE=20
+    COLON=21
+    SEMI=22
+    EQUAL=23
+    DOT=24
+    LSQUARE=25
+    RSQUARE=26
+    STRING=27
+    INT=28
+    UNIT_MS=29
+    WS=30
+    LINE_COMMENT=31
+    OPTIMISATION=32
+    VARIABLES=33
+    OBJECTIVES=34
+    CONSTRAINTS=35
+    MINIMISE=36
+    MAXIMISE=37
+    RANGE=38
+    ASSERT=39
+    AND=40
+    OR=41
+    EQ=42
+    NEQ=43
+    LE=44
+    GE=45
+    LT=46
+    GT=47
+    PLUS=48
+    MINUS=49
+    STAR=50
+    SLASH=51
+    ID=52
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
@@ -281,17 +301,17 @@ class RoboticsParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 59
+            self.state = 61
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 134246512) != 0):
-                self.state = 56
+            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 4295024752) != 0):
+                self.state = 58
                 self.statement()
-                self.state = 61
+                self.state = 63
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 62
+            self.state = 64
             self.match(RoboticsParser.EOF)
         except RecognitionException as re:
             localctx.exception = re
@@ -362,42 +382,42 @@ class RoboticsParser ( Parser ):
         localctx = RoboticsParser.StatementContext(self, self._ctx, self.state)
         self.enterRule(localctx, 2, self.RULE_statement)
         try:
-            self.state = 71
+            self.state = 73
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [4]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 64
+                self.state = 66
                 self.componentDecl()
                 pass
             elif token in [5]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 65
+                self.state = 67
                 self.connectDecl()
                 pass
             elif token in [6]:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 66
+                self.state = 68
                 self.propertyDecl()
                 pass
-            elif token in [27]:
+            elif token in [32]:
                 self.enterOuterAlt(localctx, 4)
-                self.state = 67
+                self.state = 69
                 self.optimisationBlock()
                 pass
-            elif token in [12]:
+            elif token in [13]:
                 self.enterOuterAlt(localctx, 5)
-                self.state = 68
+                self.state = 70
                 self.systemDecl()
                 pass
-            elif token in [13]:
+            elif token in [14]:
                 self.enterOuterAlt(localctx, 6)
-                self.state = 69
+                self.state = 71
                 self.vehicleDecl()
                 pass
-            elif token in [14]:
+            elif token in [15]:
                 self.enterOuterAlt(localctx, 7)
-                self.state = 70
+                self.state = 72
                 self.cpuDecl()
                 pass
             else:
@@ -461,15 +481,15 @@ class RoboticsParser ( Parser ):
         self.enterRule(localctx, 4, self.RULE_componentDecl)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 73
-            self.match(RoboticsParser.COMPONENT)
-            self.state = 74
-            self.match(RoboticsParser.ID)
             self.state = 75
-            self.match(RoboticsParser.LBRACE)
+            self.match(RoboticsParser.COMPONENT)
             self.state = 76
-            self.componentBody()
+            self.match(RoboticsParser.ID)
             self.state = 77
+            self.match(RoboticsParser.LBRACE)
+            self.state = 78
+            self.componentBody()
+            self.state = 79
             self.match(RoboticsParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -527,15 +547,15 @@ class RoboticsParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 84
+            self.state = 86
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 1920) != 0):
-                self.state = 79
+            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 6016) != 0):
+                self.state = 81
                 self.componentAttr()
-                self.state = 80
+                self.state = 82
                 self.match(RoboticsParser.SEMI)
-                self.state = 86
+                self.state = 88
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -577,6 +597,12 @@ class RoboticsParser ( Parser ):
         def INT(self):
             return self.getToken(RoboticsParser.INT, 0)
 
+        def CLASS(self):
+            return self.getToken(RoboticsParser.CLASS, 0)
+
+        def ID(self):
+            return self.getToken(RoboticsParser.ID, 0)
+
         def getRuleIndex(self):
             return RoboticsParser.RULE_componentAttr
 
@@ -602,44 +628,53 @@ class RoboticsParser ( Parser ):
         localctx = RoboticsParser.ComponentAttrContext(self, self._ctx, self.state)
         self.enterRule(localctx, 8, self.RULE_componentAttr)
         try:
-            self.state = 99
+            self.state = 104
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [7]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 87
-                self.match(RoboticsParser.PERIOD)
-                self.state = 88
-                self.match(RoboticsParser.EQUAL)
                 self.state = 89
+                self.match(RoboticsParser.PERIOD)
+                self.state = 90
+                self.match(RoboticsParser.EQUAL)
+                self.state = 91
                 self.duration()
                 pass
             elif token in [8]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 90
-                self.match(RoboticsParser.DEADLINE)
-                self.state = 91
-                self.match(RoboticsParser.EQUAL)
                 self.state = 92
+                self.match(RoboticsParser.DEADLINE)
+                self.state = 93
+                self.match(RoboticsParser.EQUAL)
+                self.state = 94
                 self.duration()
                 pass
             elif token in [9]:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 93
-                self.match(RoboticsParser.WCET)
-                self.state = 94
-                self.match(RoboticsParser.EQUAL)
                 self.state = 95
+                self.match(RoboticsParser.WCET)
+                self.state = 96
+                self.match(RoboticsParser.EQUAL)
+                self.state = 97
                 self.duration()
                 pass
             elif token in [10]:
                 self.enterOuterAlt(localctx, 4)
-                self.state = 96
-                self.match(RoboticsParser.PRIORITY)
-                self.state = 97
-                self.match(RoboticsParser.EQUAL)
                 self.state = 98
+                self.match(RoboticsParser.PRIORITY)
+                self.state = 99
+                self.match(RoboticsParser.EQUAL)
+                self.state = 100
                 self.match(RoboticsParser.INT)
+                pass
+            elif token in [12]:
+                self.enterOuterAlt(localctx, 5)
+                self.state = 101
+                self.match(RoboticsParser.CLASS)
+                self.state = 102
+                self.match(RoboticsParser.EQUAL)
+                self.state = 103
+                self.match(RoboticsParser.ID)
                 pass
             else:
                 raise NoViableAltException(self)
@@ -712,29 +747,29 @@ class RoboticsParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 101
+            self.state = 106
             self.match(RoboticsParser.CONNECT)
-            self.state = 104
+            self.state = 109
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,4,self._ctx)
             if la_ == 1:
-                self.state = 102
+                self.state = 107
                 self.match(RoboticsParser.ID)
-                self.state = 103
+                self.state = 108
                 self.match(RoboticsParser.COLON)
 
 
-            self.state = 106
+            self.state = 111
             localctx.src = self.endpoint()
-            self.state = 107
+            self.state = 112
             self.match(RoboticsParser.ARROW)
-            self.state = 108
+            self.state = 113
             localctx.dst = self.endpoint()
-            self.state = 110
+            self.state = 115
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            if _la==16:
-                self.state = 109
+            if _la==19:
+                self.state = 114
                 self.connectBody()
 
 
@@ -799,17 +834,17 @@ class RoboticsParser ( Parser ):
         self.enterRule(localctx, 12, self.RULE_connectBody)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 112
-            self.match(RoboticsParser.LBRACE)
-            self.state = 113
-            self.match(RoboticsParser.LATENCY_BUDGET)
-            self.state = 114
-            self.match(RoboticsParser.EQUAL)
-            self.state = 115
-            self.duration()
-            self.state = 116
-            self.match(RoboticsParser.SEMI)
             self.state = 117
+            self.match(RoboticsParser.LBRACE)
+            self.state = 118
+            self.match(RoboticsParser.LATENCY_BUDGET)
+            self.state = 119
+            self.match(RoboticsParser.EQUAL)
+            self.state = 120
+            self.duration()
+            self.state = 121
+            self.match(RoboticsParser.SEMI)
+            self.state = 122
             self.match(RoboticsParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -865,11 +900,11 @@ class RoboticsParser ( Parser ):
         self.enterRule(localctx, 14, self.RULE_endpoint)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 119
+            self.state = 124
             localctx.comp = self.dottedId()
-            self.state = 120
+            self.state = 125
             self.match(RoboticsParser.DOT)
-            self.state = 121
+            self.state = 126
             localctx.port = self.match(RoboticsParser.ID)
         except RecognitionException as re:
             localctx.exception = re
@@ -972,44 +1007,44 @@ class RoboticsParser ( Parser ):
         self.enterRule(localctx, 16, self.RULE_propertyDecl)
         self._la = 0 # Token type
         try:
-            self.state = 138
+            self.state = 143
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,7,self._ctx)
             if la_ == 1:
                 localctx = RoboticsParser.PropertyStringContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
-                self.state = 123
+                self.state = 128
                 self.match(RoboticsParser.PROPERTY)
-                self.state = 124
+                self.state = 129
                 self.match(RoboticsParser.ID)
-                self.state = 125
+                self.state = 130
                 self.match(RoboticsParser.COLON)
-                self.state = 126
+                self.state = 131
                 self.match(RoboticsParser.STRING)
-                self.state = 127
+                self.state = 132
                 self.match(RoboticsParser.SEMI)
                 pass
 
             elif la_ == 2:
                 localctx = RoboticsParser.PropertyBlockContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
-                self.state = 128
+                self.state = 133
                 self.match(RoboticsParser.PROPERTY)
-                self.state = 129
-                self.match(RoboticsParser.ID)
-                self.state = 130
-                self.match(RoboticsParser.LBRACE)
                 self.state = 134
+                self.match(RoboticsParser.ID)
+                self.state = 135
+                self.match(RoboticsParser.LBRACE)
+                self.state = 139
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
-                while _la==47:
-                    self.state = 131
-                    self.propertyField()
+                while _la==52:
                     self.state = 136
+                    self.propertyField()
+                    self.state = 141
                     self._errHandler.sync(self)
                     _la = self._input.LA(1)
 
-                self.state = 137
+                self.state = 142
                 self.match(RoboticsParser.RBRACE)
                 pass
 
@@ -1076,23 +1111,23 @@ class RoboticsParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 140
+            self.state = 145
             self.match(RoboticsParser.VEHICLE)
-            self.state = 141
-            self.match(RoboticsParser.ID)
-            self.state = 142
-            self.match(RoboticsParser.LBRACE)
             self.state = 146
+            self.match(RoboticsParser.ID)
+            self.state = 147
+            self.match(RoboticsParser.LBRACE)
+            self.state = 151
             self._errHandler.sync(self)
             _la = self._input.LA(1)
             while _la==4:
-                self.state = 143
-                self.componentDecl()
                 self.state = 148
+                self.componentDecl()
+                self.state = 153
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 149
+            self.state = 154
             self.match(RoboticsParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -1153,21 +1188,21 @@ class RoboticsParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 151
-            self.match(RoboticsParser.CPU)
-            self.state = 152
-            self.match(RoboticsParser.LBRACE)
             self.state = 156
+            self.match(RoboticsParser.CPU)
+            self.state = 157
+            self.match(RoboticsParser.LBRACE)
+            self.state = 161
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==47:
-                self.state = 153
-                self.cpuAttr()
+            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 4503599627567104) != 0):
                 self.state = 158
+                self.cpuAttr()
+                self.state = 163
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 159
+            self.state = 164
             self.match(RoboticsParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -1185,17 +1220,33 @@ class RoboticsParser ( Parser ):
             super().__init__(parent, invokingState)
             self.parser = parser
 
+        def SCHEDULER(self):
+            return self.getToken(RoboticsParser.SCHEDULER, 0)
+
+        def EQUAL(self):
+            return self.getToken(RoboticsParser.EQUAL, 0)
+
         def ID(self, i:int=None):
             if i is None:
                 return self.getTokens(RoboticsParser.ID)
             else:
                 return self.getToken(RoboticsParser.ID, i)
 
-        def EQUAL(self):
-            return self.getToken(RoboticsParser.EQUAL, 0)
-
         def SEMI(self):
             return self.getToken(RoboticsParser.SEMI, 0)
+
+        def CLASS_ORDER(self):
+            return self.getToken(RoboticsParser.CLASS_ORDER, 0)
+
+        def LSQUARE(self):
+            return self.getToken(RoboticsParser.LSQUARE, 0)
+
+        def classHierarchy(self):
+            return self.getTypedRuleContext(RoboticsParser.ClassHierarchyContext,0)
+
+
+        def RSQUARE(self):
+            return self.getToken(RoboticsParser.RSQUARE, 0)
 
         def INT(self):
             return self.getToken(RoboticsParser.INT, 0)
@@ -1226,20 +1277,123 @@ class RoboticsParser ( Parser ):
         self.enterRule(localctx, 22, self.RULE_cpuAttr)
         self._la = 0 # Token type
         try:
-            self.enterOuterAlt(localctx, 1)
-            self.state = 161
-            self.match(RoboticsParser.ID)
-            self.state = 162
-            self.match(RoboticsParser.EQUAL)
-            self.state = 163
-            _la = self._input.LA(1)
-            if not(_la==23 or _la==47):
-                self._errHandler.recoverInline(self)
+            self.state = 181
+            self._errHandler.sync(self)
+            token = self._input.LA(1)
+            if token in [16]:
+                self.enterOuterAlt(localctx, 1)
+                self.state = 166
+                self.match(RoboticsParser.SCHEDULER)
+                self.state = 167
+                self.match(RoboticsParser.EQUAL)
+                self.state = 168
+                self.match(RoboticsParser.ID)
+                self.state = 169
+                self.match(RoboticsParser.SEMI)
+                pass
+            elif token in [17]:
+                self.enterOuterAlt(localctx, 2)
+                self.state = 170
+                self.match(RoboticsParser.CLASS_ORDER)
+                self.state = 171
+                self.match(RoboticsParser.EQUAL)
+                self.state = 172
+                self.match(RoboticsParser.LSQUARE)
+                self.state = 173
+                self.classHierarchy()
+                self.state = 174
+                self.match(RoboticsParser.RSQUARE)
+                self.state = 175
+                self.match(RoboticsParser.SEMI)
+                pass
+            elif token in [52]:
+                self.enterOuterAlt(localctx, 3)
+                self.state = 177
+                self.match(RoboticsParser.ID)
+                self.state = 178
+                self.match(RoboticsParser.EQUAL)
+                self.state = 179
+                _la = self._input.LA(1)
+                if not(_la==28 or _la==52):
+                    self._errHandler.recoverInline(self)
+                else:
+                    self._errHandler.reportMatch(self)
+                    self.consume()
+                self.state = 180
+                self.match(RoboticsParser.SEMI)
+                pass
             else:
-                self._errHandler.reportMatch(self)
-                self.consume()
-            self.state = 164
-            self.match(RoboticsParser.SEMI)
+                raise NoViableAltException(self)
+
+        except RecognitionException as re:
+            localctx.exception = re
+            self._errHandler.reportError(self, re)
+            self._errHandler.recover(self, re)
+        finally:
+            self.exitRule()
+        return localctx
+
+
+    class ClassHierarchyContext(ParserRuleContext):
+        __slots__ = 'parser'
+
+        def __init__(self, parser, parent:ParserRuleContext=None, invokingState:int=-1):
+            super().__init__(parent, invokingState)
+            self.parser = parser
+
+        def ID(self, i:int=None):
+            if i is None:
+                return self.getTokens(RoboticsParser.ID)
+            else:
+                return self.getToken(RoboticsParser.ID, i)
+
+        def GT(self, i:int=None):
+            if i is None:
+                return self.getTokens(RoboticsParser.GT)
+            else:
+                return self.getToken(RoboticsParser.GT, i)
+
+        def getRuleIndex(self):
+            return RoboticsParser.RULE_classHierarchy
+
+        def enterRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "enterClassHierarchy" ):
+                listener.enterClassHierarchy(self)
+
+        def exitRule(self, listener:ParseTreeListener):
+            if hasattr( listener, "exitClassHierarchy" ):
+                listener.exitClassHierarchy(self)
+
+        def accept(self, visitor:ParseTreeVisitor):
+            if hasattr( visitor, "visitClassHierarchy" ):
+                return visitor.visitClassHierarchy(self)
+            else:
+                return visitor.visitChildren(self)
+
+
+
+
+    def classHierarchy(self):
+
+        localctx = RoboticsParser.ClassHierarchyContext(self, self._ctx, self.state)
+        self.enterRule(localctx, 24, self.RULE_classHierarchy)
+        self._la = 0 # Token type
+        try:
+            self.enterOuterAlt(localctx, 1)
+            self.state = 183
+            self.match(RoboticsParser.ID)
+            self.state = 188
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while _la==47:
+                self.state = 184
+                self.match(RoboticsParser.GT)
+                self.state = 185
+                self.match(RoboticsParser.ID)
+                self.state = 190
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -1298,27 +1452,27 @@ class RoboticsParser ( Parser ):
     def systemDecl(self):
 
         localctx = RoboticsParser.SystemDeclContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 24, self.RULE_systemDecl)
+        self.enterRule(localctx, 26, self.RULE_systemDecl)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 166
+            self.state = 191
             self.match(RoboticsParser.SYSTEM)
-            self.state = 167
+            self.state = 192
             self.match(RoboticsParser.ID)
-            self.state = 168
+            self.state = 193
             self.match(RoboticsParser.LBRACE)
-            self.state = 172
+            self.state = 197
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 134246512) != 0):
-                self.state = 169
+            while (((_la) & ~0x3f) == 0 and ((1 << _la) & 4295024752) != 0):
+                self.state = 194
                 self.statement()
-                self.state = 174
+                self.state = 199
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
-            self.state = 175
+            self.state = 200
             self.match(RoboticsParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -1372,16 +1526,16 @@ class RoboticsParser ( Parser ):
     def propertyField(self):
 
         localctx = RoboticsParser.PropertyFieldContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 26, self.RULE_propertyField)
+        self.enterRule(localctx, 28, self.RULE_propertyField)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 177
+            self.state = 202
             self.match(RoboticsParser.ID)
-            self.state = 178
+            self.state = 203
             self.match(RoboticsParser.EQUAL)
-            self.state = 179
+            self.state = 204
             self.propertyValue()
-            self.state = 180
+            self.state = 205
             self.match(RoboticsParser.SEMI)
         except RecognitionException as re:
             localctx.exception = re
@@ -1433,26 +1587,26 @@ class RoboticsParser ( Parser ):
     def propertyValue(self):
 
         localctx = RoboticsParser.PropertyValueContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 28, self.RULE_propertyValue)
+        self.enterRule(localctx, 30, self.RULE_propertyValue)
         try:
-            self.state = 185
+            self.state = 210
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,11,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,13,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 182
+                self.state = 207
                 self.duration()
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 183
+                self.state = 208
                 self.dottedId()
                 pass
 
             elif la_ == 3:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 184
+                self.state = 209
                 self.match(RoboticsParser.ID)
                 pass
 
@@ -1508,23 +1662,23 @@ class RoboticsParser ( Parser ):
     def dottedId(self):
 
         localctx = RoboticsParser.DottedIdContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 30, self.RULE_dottedId)
+        self.enterRule(localctx, 32, self.RULE_dottedId)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 187
+            self.state = 212
             self.match(RoboticsParser.ID)
-            self.state = 192
+            self.state = 217
             self._errHandler.sync(self)
-            _alt = self._interp.adaptivePredict(self._input,12,self._ctx)
+            _alt = self._interp.adaptivePredict(self._input,14,self._ctx)
             while _alt!=2 and _alt!=ATN.INVALID_ALT_NUMBER:
                 if _alt==1:
-                    self.state = 188
+                    self.state = 213
                     self.match(RoboticsParser.DOT)
-                    self.state = 189
+                    self.state = 214
                     self.match(RoboticsParser.ID) 
-                self.state = 194
+                self.state = 219
                 self._errHandler.sync(self)
-                _alt = self._interp.adaptivePredict(self._input,12,self._ctx)
+                _alt = self._interp.adaptivePredict(self._input,14,self._ctx)
 
         except RecognitionException as re:
             localctx.exception = re
@@ -1571,12 +1725,12 @@ class RoboticsParser ( Parser ):
     def duration(self):
 
         localctx = RoboticsParser.DurationContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 32, self.RULE_duration)
+        self.enterRule(localctx, 34, self.RULE_duration)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 195
+            self.state = 220
             self.match(RoboticsParser.INT)
-            self.state = 196
+            self.state = 221
             self.match(RoboticsParser.UNIT_MS)
         except RecognitionException as re:
             localctx.exception = re
@@ -1662,69 +1816,69 @@ class RoboticsParser ( Parser ):
     def optimisationBlock(self):
 
         localctx = RoboticsParser.OptimisationBlockContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 34, self.RULE_optimisationBlock)
+        self.enterRule(localctx, 36, self.RULE_optimisationBlock)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 198
-            self.match(RoboticsParser.OPTIMISATION)
-            self.state = 199
-            self.match(RoboticsParser.LBRACE)
-            self.state = 200
-            self.match(RoboticsParser.VARIABLES)
-            self.state = 201
-            self.match(RoboticsParser.LBRACE)
-            self.state = 203 
-            self._errHandler.sync(self)
-            _la = self._input.LA(1)
-            while True:
-                self.state = 202
-                self.variableDecl()
-                self.state = 205 
-                self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if not (_la==1 or _la==47):
-                    break
-
-            self.state = 207
-            self.match(RoboticsParser.RBRACE)
-            self.state = 208
-            self.match(RoboticsParser.OBJECTIVES)
-            self.state = 209
-            self.match(RoboticsParser.LBRACE)
-            self.state = 211 
-            self._errHandler.sync(self)
-            _la = self._input.LA(1)
-            while True:
-                self.state = 210
-                self.objectiveDecl()
-                self.state = 213 
-                self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if not (_la==31 or _la==32):
-                    break
-
-            self.state = 215
-            self.match(RoboticsParser.RBRACE)
-            self.state = 216
-            self.match(RoboticsParser.CONSTRAINTS)
-            self.state = 217
-            self.match(RoboticsParser.LBRACE)
-            self.state = 219 
-            self._errHandler.sync(self)
-            _la = self._input.LA(1)
-            while True:
-                self.state = 218
-                self.constraintDecl()
-                self.state = 221 
-                self._errHandler.sync(self)
-                _la = self._input.LA(1)
-                if not (_la==34):
-                    break
-
             self.state = 223
-            self.match(RoboticsParser.RBRACE)
+            self.match(RoboticsParser.OPTIMISATION)
             self.state = 224
+            self.match(RoboticsParser.LBRACE)
+            self.state = 225
+            self.match(RoboticsParser.VARIABLES)
+            self.state = 226
+            self.match(RoboticsParser.LBRACE)
+            self.state = 228 
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while True:
+                self.state = 227
+                self.variableDecl()
+                self.state = 230 
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+                if not (_la==1 or _la==52):
+                    break
+
+            self.state = 232
+            self.match(RoboticsParser.RBRACE)
+            self.state = 233
+            self.match(RoboticsParser.OBJECTIVES)
+            self.state = 234
+            self.match(RoboticsParser.LBRACE)
+            self.state = 236 
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while True:
+                self.state = 235
+                self.objectiveDecl()
+                self.state = 238 
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+                if not (_la==36 or _la==37):
+                    break
+
+            self.state = 240
+            self.match(RoboticsParser.RBRACE)
+            self.state = 241
+            self.match(RoboticsParser.CONSTRAINTS)
+            self.state = 242
+            self.match(RoboticsParser.LBRACE)
+            self.state = 244 
+            self._errHandler.sync(self)
+            _la = self._input.LA(1)
+            while True:
+                self.state = 243
+                self.constraintDecl()
+                self.state = 246 
+                self._errHandler.sync(self)
+                _la = self._input.LA(1)
+                if not (_la==39):
+                    break
+
+            self.state = 248
+            self.match(RoboticsParser.RBRACE)
+            self.state = 249
             self.match(RoboticsParser.RBRACE)
         except RecognitionException as re:
             localctx.exception = re
@@ -1786,20 +1940,20 @@ class RoboticsParser ( Parser ):
     def variableDecl(self):
 
         localctx = RoboticsParser.VariableDeclContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 36, self.RULE_variableDecl)
+        self.enterRule(localctx, 38, self.RULE_variableDecl)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 226
+            self.state = 251
             self.targetRef()
-            self.state = 227
+            self.state = 252
             self.match(RoboticsParser.DOT)
-            self.state = 228
+            self.state = 253
             self.attrName()
-            self.state = 229
+            self.state = 254
             self.match(RoboticsParser.RANGE)
-            self.state = 230
+            self.state = 255
             self.rangeSpec()
-            self.state = 231
+            self.state = 256
             self.match(RoboticsParser.SEMI)
         except RecognitionException as re:
             localctx.exception = re
@@ -1881,25 +2035,25 @@ class RoboticsParser ( Parser ):
     def targetRef(self):
 
         localctx = RoboticsParser.TargetRefContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 38, self.RULE_targetRef)
+        self.enterRule(localctx, 40, self.RULE_targetRef)
         try:
-            self.state = 238
+            self.state = 263
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [47]:
+            if token in [52]:
                 localctx = RoboticsParser.ComponentRefContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
-                self.state = 233
+                self.state = 258
                 self.dottedId()
                 pass
             elif token in [1]:
                 localctx = RoboticsParser.ConnectionRefWrappedContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
-                self.state = 234
+                self.state = 259
                 self.match(RoboticsParser.T__0)
-                self.state = 235
+                self.state = 260
                 self.connectionRef()
-                self.state = 236
+                self.state = 261
                 self.match(RoboticsParser.T__1)
                 pass
             else:
@@ -1966,22 +2120,22 @@ class RoboticsParser ( Parser ):
     def connectionRef(self):
 
         localctx = RoboticsParser.ConnectionRefContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 40, self.RULE_connectionRef)
+        self.enterRule(localctx, 42, self.RULE_connectionRef)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 240
+            self.state = 265
             self.dottedId()
-            self.state = 241
+            self.state = 266
             self.match(RoboticsParser.DOT)
-            self.state = 242
+            self.state = 267
             self.match(RoboticsParser.ID)
-            self.state = 243
+            self.state = 268
             self.match(RoboticsParser.ARROW)
-            self.state = 244
+            self.state = 269
             self.dottedId()
-            self.state = 245
+            self.state = 270
             self.match(RoboticsParser.DOT)
-            self.state = 246
+            self.state = 271
             self.match(RoboticsParser.ID)
         except RecognitionException as re:
             localctx.exception = re
@@ -2040,13 +2194,13 @@ class RoboticsParser ( Parser ):
     def attrName(self):
 
         localctx = RoboticsParser.AttrNameContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 42, self.RULE_attrName)
+        self.enterRule(localctx, 44, self.RULE_attrName)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 248
+            self.state = 273
             _la = self._input.LA(1)
-            if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 140737488359296) != 0)):
+            if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 4503599627374464) != 0)):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
@@ -2097,14 +2251,14 @@ class RoboticsParser ( Parser ):
     def rangeSpec(self):
 
         localctx = RoboticsParser.RangeSpecContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 44, self.RULE_rangeSpec)
+        self.enterRule(localctx, 46, self.RULE_rangeSpec)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 250
+            self.state = 275
             self.literalDuration()
-            self.state = 251
+            self.state = 276
             self.match(RoboticsParser.T__2)
-            self.state = 252
+            self.state = 277
             self.literalDuration()
         except RecognitionException as re:
             localctx.exception = re
@@ -2157,20 +2311,20 @@ class RoboticsParser ( Parser ):
     def objectiveDecl(self):
 
         localctx = RoboticsParser.ObjectiveDeclContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 46, self.RULE_objectiveDecl)
+        self.enterRule(localctx, 48, self.RULE_objectiveDecl)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 254
+            self.state = 279
             _la = self._input.LA(1)
-            if not(_la==31 or _la==32):
+            if not(_la==36 or _la==37):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
                 self.consume()
-            self.state = 255
+            self.state = 280
             self.match(RoboticsParser.ID)
-            self.state = 256
+            self.state = 281
             self.match(RoboticsParser.SEMI)
         except RecognitionException as re:
             localctx.exception = re
@@ -2221,14 +2375,14 @@ class RoboticsParser ( Parser ):
     def constraintDecl(self):
 
         localctx = RoboticsParser.ConstraintDeclContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 48, self.RULE_constraintDecl)
+        self.enterRule(localctx, 50, self.RULE_constraintDecl)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 258
+            self.state = 283
             self.match(RoboticsParser.ASSERT)
-            self.state = 259
+            self.state = 284
             self.expression(0)
-            self.state = 260
+            self.state = 285
             self.match(RoboticsParser.SEMI)
         except RecognitionException as re:
             localctx.exception = re
@@ -2275,12 +2429,12 @@ class RoboticsParser ( Parser ):
     def literalDuration(self):
 
         localctx = RoboticsParser.LiteralDurationContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 50, self.RULE_literalDuration)
+        self.enterRule(localctx, 52, self.RULE_literalDuration)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 262
+            self.state = 287
             self.match(RoboticsParser.INT)
-            self.state = 263
+            self.state = 288
             self.match(RoboticsParser.UNIT_MS)
         except RecognitionException as re:
             localctx.exception = re
@@ -2486,8 +2640,8 @@ class RoboticsParser ( Parser ):
         _parentState = self.state
         localctx = RoboticsParser.ExpressionContext(self, self._ctx, _parentState)
         _prevctx = localctx
-        _startState = 52
-        self.enterRecursionRule(localctx, 52, self.RULE_expression, _p)
+        _startState = 54
+        self.enterRecursionRule(localctx, 54, self.RULE_expression, _p)
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
@@ -2495,37 +2649,37 @@ class RoboticsParser ( Parser ):
             self._ctx = localctx
             _prevctx = localctx
 
-            self.state = 266
+            self.state = 291
             self.primary()
             self._ctx.stop = self._input.LT(-1)
-            self.state = 282
+            self.state = 307
             self._errHandler.sync(self)
-            _alt = self._interp.adaptivePredict(self._input,18,self._ctx)
+            _alt = self._interp.adaptivePredict(self._input,20,self._ctx)
             while _alt!=2 and _alt!=ATN.INVALID_ALT_NUMBER:
                 if _alt==1:
                     if self._parseListeners is not None:
                         self.triggerExitRuleEvent()
                     _prevctx = localctx
-                    self.state = 280
+                    self.state = 305
                     self._errHandler.sync(self)
-                    la_ = self._interp.adaptivePredict(self._input,17,self._ctx)
+                    la_ = self._interp.adaptivePredict(self._input,19,self._ctx)
                     if la_ == 1:
                         localctx = RoboticsParser.MulDivExprContext(self, RoboticsParser.ExpressionContext(self, _parentctx, _parentState))
                         localctx.left = _prevctx
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_expression)
-                        self.state = 268
+                        self.state = 293
                         if not self.precpred(self._ctx, 4):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 4)")
-                        self.state = 269
+                        self.state = 294
                         localctx.op = self._input.LT(1)
                         _la = self._input.LA(1)
-                        if not(_la==45 or _la==46):
+                        if not(_la==50 or _la==51):
                             localctx.op = self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()
-                        self.state = 270
+                        self.state = 295
                         localctx.right = self.expression(5)
                         pass
 
@@ -2533,19 +2687,19 @@ class RoboticsParser ( Parser ):
                         localctx = RoboticsParser.AddSubExprContext(self, RoboticsParser.ExpressionContext(self, _parentctx, _parentState))
                         localctx.left = _prevctx
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_expression)
-                        self.state = 271
+                        self.state = 296
                         if not self.precpred(self._ctx, 3):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 3)")
-                        self.state = 272
+                        self.state = 297
                         localctx.op = self._input.LT(1)
                         _la = self._input.LA(1)
-                        if not(_la==43 or _la==44):
+                        if not(_la==48 or _la==49):
                             localctx.op = self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()
-                        self.state = 273
+                        self.state = 298
                         localctx.right = self.expression(4)
                         pass
 
@@ -2553,19 +2707,19 @@ class RoboticsParser ( Parser ):
                         localctx = RoboticsParser.CompExprContext(self, RoboticsParser.ExpressionContext(self, _parentctx, _parentState))
                         localctx.left = _prevctx
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_expression)
-                        self.state = 274
+                        self.state = 299
                         if not self.precpred(self._ctx, 2):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
-                        self.state = 275
+                        self.state = 300
                         localctx.op = self._input.LT(1)
                         _la = self._input.LA(1)
-                        if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 8658654068736) != 0)):
+                        if not((((_la) & ~0x3f) == 0 and ((1 << _la) & 277076930199552) != 0)):
                             localctx.op = self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()
-                        self.state = 276
+                        self.state = 301
                         localctx.right = self.expression(3)
                         pass
 
@@ -2573,26 +2727,26 @@ class RoboticsParser ( Parser ):
                         localctx = RoboticsParser.LogicExprContext(self, RoboticsParser.ExpressionContext(self, _parentctx, _parentState))
                         localctx.left = _prevctx
                         self.pushNewRecursionContext(localctx, _startState, self.RULE_expression)
-                        self.state = 277
+                        self.state = 302
                         if not self.precpred(self._ctx, 1):
                             from antlr4.error.Errors import FailedPredicateException
                             raise FailedPredicateException(self, "self.precpred(self._ctx, 1)")
-                        self.state = 278
+                        self.state = 303
                         localctx.op = self._input.LT(1)
                         _la = self._input.LA(1)
-                        if not(_la==35 or _la==36):
+                        if not(_la==40 or _la==41):
                             localctx.op = self._errHandler.recoverInline(self)
                         else:
                             self._errHandler.reportMatch(self)
                             self.consume()
-                        self.state = 279
+                        self.state = 304
                         localctx.right = self.expression(2)
                         pass
 
              
-                self.state = 284
+                self.state = 309
                 self._errHandler.sync(self)
-                _alt = self._interp.adaptivePredict(self._input,18,self._ctx)
+                _alt = self._interp.adaptivePredict(self._input,20,self._ctx)
 
         except RecognitionException as re:
             localctx.exception = re
@@ -2722,40 +2876,40 @@ class RoboticsParser ( Parser ):
     def primary(self):
 
         localctx = RoboticsParser.PrimaryContext(self, self._ctx, self.state)
-        self.enterRule(localctx, 54, self.RULE_primary)
+        self.enterRule(localctx, 56, self.RULE_primary)
         try:
-            self.state = 292
+            self.state = 317
             self._errHandler.sync(self)
-            la_ = self._interp.adaptivePredict(self._input,19,self._ctx)
+            la_ = self._interp.adaptivePredict(self._input,21,self._ctx)
             if la_ == 1:
                 localctx = RoboticsParser.IntLitContext(self, localctx)
                 self.enterOuterAlt(localctx, 1)
-                self.state = 285
+                self.state = 310
                 self.match(RoboticsParser.INT)
                 pass
 
             elif la_ == 2:
                 localctx = RoboticsParser.DurLitContext(self, localctx)
                 self.enterOuterAlt(localctx, 2)
-                self.state = 286
+                self.state = 311
                 self.literalDuration()
                 pass
 
             elif la_ == 3:
                 localctx = RoboticsParser.VarRefContext(self, localctx)
                 self.enterOuterAlt(localctx, 3)
-                self.state = 287
+                self.state = 312
                 self.match(RoboticsParser.ID)
                 pass
 
             elif la_ == 4:
                 localctx = RoboticsParser.ParenExprContext(self, localctx)
                 self.enterOuterAlt(localctx, 4)
-                self.state = 288
+                self.state = 313
                 self.match(RoboticsParser.T__0)
-                self.state = 289
+                self.state = 314
                 self.expression(0)
-                self.state = 290
+                self.state = 315
                 self.match(RoboticsParser.T__1)
                 pass
 
@@ -2773,7 +2927,7 @@ class RoboticsParser ( Parser ):
     def sempred(self, localctx:RuleContext, ruleIndex:int, predIndex:int):
         if self._predicates == None:
             self._predicates = dict()
-        self._predicates[26] = self.expression_sempred
+        self._predicates[27] = self.expression_sempred
         pred = self._predicates.get(ruleIndex, None)
         if pred is None:
             raise Exception("No predicate with index:" + str(ruleIndex))

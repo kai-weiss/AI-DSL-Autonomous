@@ -1,6 +1,6 @@
 from DSL.Robotics.RoboticsParser import RoboticsParser
 from DSL.Robotics.RoboticsVisitor import RoboticsVisitor
-from DSL.metamodel import Model, Component, Connection, OptimisationSpec, Variable
+from DSL.metamodel import (Model, Component, Connection, CpuConfig, OptimisationSpec, Variable,)
 from datetime import timedelta
 
 
@@ -30,6 +30,8 @@ class ASTBuilder(RoboticsVisitor):
                     comp.wcet = self._duration(attrCtx)
                 case RoboticsParser.PRIORITY:
                     comp.priority = int(attrCtx.INT().getText())
+                case RoboticsParser.CLASS:
+                    comp.criticality_class = attrCtx.ID().getText()
         self.model.components[name] = comp
         return None  # do not recurse further
 
@@ -109,10 +111,37 @@ class ASTBuilder(RoboticsVisitor):
 
     # cpuDecl : CPU LBRACE cpuAttr* RBRACE ;
     def visitCpuDecl(self, ctx: RoboticsParser.CpuDeclContext):
+        if self.model.cpu is None:
+            self.model.cpu = CpuConfig()
+        config = self.model.cpu
+        config.scheduler = None
+        config.class_order = []
+        config.attributes = {}
+        self.model.cpu_attrs.clear()
+
         for attrCtx in ctx.cpuAttr():
-            key = attrCtx.getChild(0).getText()
-            value = attrCtx.getChild(2).getText()
-            self.model.cpu_attrs.append((key, value))
+            if attrCtx.SCHEDULER():
+                value = attrCtx.ID(0).getText()
+                config.scheduler = value
+                config.attributes["scheduler"] = value
+                self.model.cpu_attrs.append(("scheduler", value))
+            elif attrCtx.CLASS_ORDER():
+                order = [tok.getText() for tok in attrCtx.classHierarchy().ID()]
+                config.class_order = order
+                rendered = f"[{' > '.join(order)}]"
+                config.attributes["class_order"] = rendered
+                self.model.cpu_attrs.append(("class_order", rendered))
+            else:
+                ids = attrCtx.ID()
+                key = ids[0].getText()
+                if attrCtx.INT():
+                    value = attrCtx.INT().getText()
+                elif len(ids) > 1:
+                    value = ids[1].getText()
+                else:
+                    value = attrCtx.getText().split("=", 1)[-1].rstrip(";")
+                config.attributes[key] = value
+                self.model.cpu_attrs.append((key, value))
         return None
 
     # optimisationBlock : OPTIMISATION '{' VARIABLES '{' variableDecl+ '}'

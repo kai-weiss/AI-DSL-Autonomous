@@ -10,6 +10,15 @@ class Component:
     wcet: timedelta | None = None
     priority: int | None = None
     vehicle: str | None = None
+    criticality_class: str | None = None
+    preemption_threshold: str | None = None
+
+
+@dataclass
+class CpuConfig:
+    scheduler: str | None = None
+    class_order: list[str] = field(default_factory=list)
+    attributes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

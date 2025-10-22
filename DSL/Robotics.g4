@@ -19,6 +19,7 @@ componentAttr   : PERIOD    EQUAL duration
                 | DEADLINE  EQUAL duration
                 | WCET      EQUAL duration
                 | PRIORITY  EQUAL INT
+                | CLASS     EQUAL ID
                 ;
 
 connectDecl     : CONNECT (ID COLON)? src=endpoint ARROW dst=endpoint connectBody? ;
@@ -32,7 +33,12 @@ propertyDecl    : PROPERTY ID COLON STRING SEMI                # propertyString
 vehicleDecl     : VEHICLE ID LBRACE componentDecl* RBRACE ;
 
 cpuDecl         : CPU LBRACE cpuAttr* RBRACE ;
-cpuAttr         : ID EQUAL (INT | ID) SEMI ;
+cpuAttr         : SCHEDULER EQUAL ID SEMI
+                | CLASS_ORDER EQUAL LSQUARE classHierarchy RSQUARE SEMI
+                | ID EQUAL (INT | ID) SEMI
+                ;
+
+classHierarchy  : ID (GT ID)* ;
 
 systemDecl      : SYSTEM ID LBRACE statement* RBRACE ;
 
@@ -120,10 +126,14 @@ DEADLINE        : 'deadline' ;
 WCET            : 'WCET' ;
 PRIORITY        : 'priority' ;
 LATENCY_BUDGET  : 'latency_budget' ;
+CLASS           : 'class' ;
 
 SYSTEM          : 'SYSTEM' ;
 VEHICLE         : 'VEHICLE' ;
 CPU             : 'CPU' ;
+SCHEDULER       : 'scheduler' ;
+CLASS_ORDER     : 'class_order' ;
+
 
 ARROW           : '->' ;
 LBRACE          : '{' ;
@@ -132,6 +142,8 @@ COLON           : ':' ;
 SEMI            : ';' ;
 EQUAL           : '=' ;
 DOT             : '.' ;
+LSQUARE         : '[' ;
+RSQUARE         : ']' ;
 
 STRING          : '"' ( ~["\\] | '\\' . )* '"' ;
 INT             : [0-9]+ ;
