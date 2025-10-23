@@ -208,7 +208,7 @@ class ModelBuilder:
         for comp in components:
             period_val = getattr(comp, "period_ms", None) or getattr(comp, "period", None)
             if period_val is None and not incoming.get(comp.name):
-                tpl = emit_env_trigger(nta, comp.name)
+                tpl = emit_env_trigger(nta, comp)
                 inst = f"I_{tpl}"
                 sys_inst.append(f"{inst} = {tpl}();")
 

@@ -150,19 +150,16 @@ def emit_periodic_timer(root: ET.Element, comp_name: str, period_ms: int) -> str
     return tpl_name
 
 
-def emit_env_trigger(root: ET.Element, comp_name: str) -> str:
-    """
-    Environment trigger for components without inputs.
-    Emit a one-shot release at time t = 0.
-    """
-    tpl_name = f"Env_{comp_name}"
+def emit_env_trigger(root: ET.Element, comp: Component) -> str:
+    """Environment trigger for components without inputs."""
+
+    tpl_name = f"Env_{comp.name}"
     tpl = ET.SubElement(root, "template")
     ET.SubElement(tpl, "name").text = tpl_name
     ET.SubElement(tpl, "declaration").text = "clock x;"
 
     idle = ET.SubElement(tpl, "location", id=f"{tpl_name}_Idle")
     ET.SubElement(idle, "name").text = "Idle"
-    ET.SubElement(idle, "committed")
 
     done = ET.SubElement(tpl, "location", id=f"{tpl_name}_Done")
     ET.SubElement(done, "name").text = "Done"
@@ -172,7 +169,34 @@ def emit_env_trigger(root: ET.Element, comp_name: str) -> str:
     tr = ET.SubElement(tpl, "transition")
     ET.SubElement(tr, "source", ref=idle.get("id"))
     ET.SubElement(tr, "target", ref=done.get("id"))
-    ET.SubElement(tr, "label", kind="synchronisation").text = f"release_{comp_name}!"
+
+    guard_parts: list[str] = []
+
+    if getattr(comp, "criticality_class", None) == "SafetyCritical":
+        # Allow a SafetyCritical component to be released while other
+        # activities execute by introducing a short, non-deterministic
+        # offset before the first release.  This creates the interleavings
+        # that make preemption observable in the analysis.
+        min_delay = 1
+        max_delay = (
+            to_ms(getattr(comp, "deadline", None))
+            or to_ms(getattr(comp, "period", None))
+            or to_ms(getattr(comp, "wcet", None))
+        )
+
+        if max_delay is None or max_delay < min_delay:
+            max_delay = min_delay
+
+        guard_parts.append(f"x >= {min_delay}")
+        guard_parts.append(f"x <= {max_delay}")
+        ET.SubElement(idle, "label", kind="invariant").text = f"x <= {max_delay}"
+    else:
+        ET.SubElement(idle, "committed")
+
+    if guard_parts:
+        ET.SubElement(tr, "label", kind="guard").text = " && ".join(guard_parts)
+
+    ET.SubElement(tr, "label", kind="synchronisation").text = f"release_{comp.name}!"
 
     return tpl_name
 

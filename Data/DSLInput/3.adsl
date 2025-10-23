@@ -11,7 +11,7 @@ SYSTEM CooperativeOvertaking {
     VEHICLE A {
         COMPONENT InteriorLight_A {
             period = 40ms;
-            deadline = 40ms;
+            deadline = 60ms;
             WCET = 10ms;
             class = BestEffort;
             priority = 10;
@@ -20,7 +20,7 @@ SYSTEM CooperativeOvertaking {
         COMPONENT AckHandler_A {
             // Triggered by an overtaking request message from Vehicle B
             WCET = 2ms;
-            deadline = 2ms;
+            deadline = 15ms;
             priority = 2;
             class = Chain;
         }
@@ -38,20 +38,20 @@ SYSTEM CooperativeOvertaking {
         COMPONENT PermissionReqTx_B {
             // Triggered when Perception_B detects a "slower vehicle ahead"
             WCET = 2ms;
-            deadline = 2ms;
+            deadline = 15ms;
             class = Chain;
             priority = 1;
         }
         COMPONENT PermissionAckRx_B {
             // Triggered by an Ack/Nack message from Vehicle A
             WCET = 2ms;
-            deadline = 2ms;
+            deadline = 15ms;
             class = Chain;
             priority = 3;
         }
         COMPONENT TrajectoryPlanner_B {
             period = 10ms;
-            deadline = 20ms;
+            deadline = 45ms;
             WCET = 10ms;
             class = Chain;
             priority = 4;
@@ -59,7 +59,7 @@ SYSTEM CooperativeOvertaking {
         COMPONENT Controller_B {
             // Triggered when a new trajectory is available
             WCET = 25ms;
-            deadline = 25ms;
+            deadline = 80ms;
             class = Chain;
             priority = 5;
         }

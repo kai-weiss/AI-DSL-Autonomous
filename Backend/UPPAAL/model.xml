@@ -38,7 +38,7 @@
     int running_B = -1;
     int criticality_B[NUM_COMPONENTS_B] = {0, 1, 1, 1, 1};
     int thresholds_B[NUM_COMPONENTS_B] = {0, 1, 1, 1, 1};
-    const int WCET_B[NUM_COMPONENTS_B] = {10, 2, 2, 20, 25};
+    const int WCET_B[NUM_COMPONENTS_B] = {10, 2, 2, 10, 25};
     int remaining_B[NUM_COMPONENTS_B];
     int next_B = -1;
   </declaration>
@@ -55,7 +55,7 @@ clock slice;</declaration>
     </location>
     <location id="InteriorLight_A_Exec">
       <name>Exec</name>
-      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 40</label>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 60</label>
     </location>
     <location id="InteriorLight_A_DeadlineMiss">
       <name>bad</name>
@@ -96,12 +96,12 @@ clock slice;</declaration>
     <transition>
       <source ref="InteriorLight_A_Ready" />
       <target ref="InteriorLight_A_DeadlineMiss" />
-      <label kind="guard">x &gt; 40</label>
+      <label kind="guard">x &gt; 60</label>
     </transition>
     <transition>
       <source ref="InteriorLight_A_Exec" />
       <target ref="InteriorLight_A_DeadlineMiss" />
-      <label kind="guard">x &gt; 40</label>
+      <label kind="guard">x &gt; 60</label>
     </transition>
   </template>
   <template>
@@ -116,7 +116,7 @@ clock slice;</declaration>
     </location>
     <location id="AckHandler_A_Exec">
       <name>Exec</name>
-      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 2</label>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 15</label>
     </location>
     <location id="AckHandler_A_DeadlineMiss">
       <name>bad</name>
@@ -157,12 +157,12 @@ clock slice;</declaration>
     <transition>
       <source ref="AckHandler_A_Ready" />
       <target ref="AckHandler_A_DeadlineMiss" />
-      <label kind="guard">x &gt; 2</label>
+      <label kind="guard">x &gt; 15</label>
     </transition>
     <transition>
       <source ref="AckHandler_A_Exec" />
       <target ref="AckHandler_A_DeadlineMiss" />
-      <label kind="guard">x &gt; 2</label>
+      <label kind="guard">x &gt; 15</label>
     </transition>
   </template>
   <template>
@@ -238,7 +238,7 @@ clock slice;</declaration>
     </location>
     <location id="PermissionReqTx_B_Exec">
       <name>Exec</name>
-      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 2</label>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 15</label>
     </location>
     <location id="PermissionReqTx_B_DeadlineMiss">
       <name>bad</name>
@@ -279,12 +279,12 @@ clock slice;</declaration>
     <transition>
       <source ref="PermissionReqTx_B_Ready" />
       <target ref="PermissionReqTx_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 2</label>
+      <label kind="guard">x &gt; 15</label>
     </transition>
     <transition>
       <source ref="PermissionReqTx_B_Exec" />
       <target ref="PermissionReqTx_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 2</label>
+      <label kind="guard">x &gt; 15</label>
     </transition>
   </template>
   <template>
@@ -299,7 +299,7 @@ clock slice;</declaration>
     </location>
     <location id="PermissionAckRx_B_Exec">
       <name>Exec</name>
-      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 2</label>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 15</label>
     </location>
     <location id="PermissionAckRx_B_DeadlineMiss">
       <name>bad</name>
@@ -340,12 +340,12 @@ clock slice;</declaration>
     <transition>
       <source ref="PermissionAckRx_B_Ready" />
       <target ref="PermissionAckRx_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 2</label>
+      <label kind="guard">x &gt; 15</label>
     </transition>
     <transition>
       <source ref="PermissionAckRx_B_Exec" />
       <target ref="PermissionAckRx_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 2</label>
+      <label kind="guard">x &gt; 15</label>
     </transition>
   </template>
   <template>
@@ -361,7 +361,7 @@ clock slice;</declaration>
     </location>
     <location id="TrajectoryPlanner_B_Exec">
       <name>Exec</name>
-      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 20</label>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 45</label>
     </location>
     <location id="TrajectoryPlanner_B_DeadlineMiss">
       <name>bad</name>
@@ -402,12 +402,12 @@ clock slice;</declaration>
     <transition>
       <source ref="TrajectoryPlanner_B_Ready" />
       <target ref="TrajectoryPlanner_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 20</label>
+      <label kind="guard">x &gt; 45</label>
     </transition>
     <transition>
       <source ref="TrajectoryPlanner_B_Exec" />
       <target ref="TrajectoryPlanner_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 20</label>
+      <label kind="guard">x &gt; 45</label>
     </transition>
   </template>
   <template>
@@ -422,7 +422,7 @@ clock slice;</declaration>
     </location>
     <location id="Controller_B_Exec">
       <name>Exec</name>
-      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 25</label>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 80</label>
     </location>
     <location id="Controller_B_DeadlineMiss">
       <name>bad</name>
@@ -463,12 +463,12 @@ clock slice;</declaration>
     <transition>
       <source ref="Controller_B_Ready" />
       <target ref="Controller_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 25</label>
+      <label kind="guard">x &gt; 80</label>
     </transition>
     <transition>
       <source ref="Controller_B_Exec" />
       <target ref="Controller_B_DeadlineMiss" />
-      <label kind="guard">x &gt; 25</label>
+      <label kind="guard">x &gt; 80</label>
     </transition>
   </template>
   <template>
@@ -576,7 +576,7 @@ clock slice;</declaration>
     <declaration>clock x;</declaration>
     <location id="Env_Crash_B_Idle">
       <name>Idle</name>
-      <committed />
+      <label kind="invariant">x &lt;= 40</label>
     </location>
     <location id="Env_Crash_B_Done">
       <name>Done</name>
@@ -585,6 +585,7 @@ clock slice;</declaration>
     <transition>
       <source ref="Env_Crash_B_Idle" />
       <target ref="Env_Crash_B_Done" />
+      <label kind="guard">x &gt;= 1 &amp;&amp; x &lt;= 40</label>
       <label kind="synchronisation">release_Crash_B!</label>
     </transition>
   </template>
@@ -1004,11 +1005,11 @@ clock slice;</declaration>
     </location>
     <location id="PipeObs_EndToEndLatency_TrajectoryPlanner_B">
       <name>Wait_TrajectoryPlanner_B</name>
-      <label kind="invariant">t &lt;= 54</label>
+      <label kind="invariant">t &lt;= 44</label>
     </location>
     <location id="PipeObs_EndToEndLatency_Controller_B">
       <name>Wait_Controller_B</name>
-      <label kind="invariant">t &lt;= 179</label>
+      <label kind="invariant">t &lt;= 169</label>
     </location>
     <location id="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A">
       <name>Conn_PermissionReqTx_B_to_AckHandler_A</name>
@@ -1024,7 +1025,7 @@ clock slice;</declaration>
     </location>
     <location id="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B">
       <name>Conn_TrajectoryPlanner_B_to_Controller_B</name>
-      <label kind="invariant">t &lt;= 154 &amp;&amp; e &lt;= 100</label>
+      <label kind="invariant">t &lt;= 144 &amp;&amp; e &lt;= 100</label>
     </location>
     <location id="PipeObs_EndToEndLatency_Bad">
       <name>bad</name>
@@ -1107,7 +1108,7 @@ clock slice;</declaration>
       <source ref="PipeObs_EndToEndLatency_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Done" />
       <label kind="synchronisation">done_Controller_B?</label>
-      <label kind="guard">t &lt;= 179</label>
+      <label kind="guard">t &lt;= 169</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_PermissionReqTx_B" />
@@ -1127,12 +1128,12 @@ clock slice;</declaration>
     <transition>
       <source ref="PipeObs_EndToEndLatency_TrajectoryPlanner_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">t == 54</label>
+      <label kind="guard">t == 44</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">t == 179</label>
+      <label kind="guard">t == 169</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A" />
@@ -1152,7 +1153,7 @@ clock slice;</declaration>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">t == 154</label>
+      <label kind="guard">t == 144</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Done" />
