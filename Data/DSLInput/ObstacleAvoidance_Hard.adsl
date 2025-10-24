@@ -1,0 +1,100 @@
+// Scenario 5: Obstacle Avoidance (Hard) — multi-neighbor broadcast
+
+SYSTEM ObstacleAvoidance_Hard {
+    CPU {
+        cores       = 1;
+        scheduler   = LIMITED_PREEMPTIVE_FP;
+        class_order = [ SafetyCritical > Chain > BestEffort ];
+    }
+
+    VEHICLE B { // Our vehicle (detector/initiator)
+        COMPONENT Perception_B {
+            period   = 40ms;
+            deadline = 45ms;
+            WCET     = 10ms;
+            class    = BestEffort;
+            priority = 10;
+        }
+        COMPONENT WarnTx_B {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 2;
+        }
+        COMPONENT AcksCollected_B {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 6;
+        }
+        COMPONENT Planner_B {
+            period   = 15ms;
+            deadline = 20ms;
+            WCET     = 12ms;
+            class    = Chain;
+            priority = 7;
+        }
+        COMPONENT Controller_B {
+            WCET     = 22ms;
+            deadline = 30ms;
+            class    = Chain;
+            priority = 8;
+        }
+    }
+
+    VEHICLE A { // Neighbor 1
+        COMPONENT WarnAck_A {
+            WCET     = 2ms;
+            deadline = 10ms;
+            class    = Chain;
+            priority = 3;
+        }
+    }
+    VEHICLE C { // Neighbor 2
+        COMPONENT WarnAck_C {
+            WCET     = 2ms;
+            deadline = 10ms;
+            class    = Chain;
+            priority = 4;
+        }
+    }
+
+    // Broadcast and collect acks, then plan
+    CONNECT BroadcastA: B.WarnTx_B.output -> A.WarnAck_A.input   { latency_budget = 10ms; }
+    CONNECT BroadcastC: B.WarnTx_B.output -> C.WarnAck_C.input   { latency_budget = 10ms; }
+    CONNECT CollectA:   A.WarnAck_A.output -> B.AcksCollected_B.input { latency_budget = 10ms; }
+    CONNECT CollectC:   C.WarnAck_C.output -> B.AcksCollected_B.input { latency_budget = 10ms; }
+    CONNECT PlanTrig:   B.AcksCollected_B.output -> B.Planner_B.input  { latency_budget = 4ms; }
+    CONNECT CtrlTrig:   B.Planner_B.output -> B.Controller_B.input     { latency_budget = 80ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE WarnTx_B
+               -> AcksCollected_B
+               -> Planner_B
+               -> Controller_B
+       WITHIN 200ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            B.Perception_B.period       range 30ms .. 60ms;
+            B.Planner_B.period          range 10ms .. 30ms;
+
+            B.Perception_B.WCET         range 6ms .. 15ms;
+            B.WarnTx_B.WCET             range 1ms .. 5ms;
+            A.WarnAck_A.WCET            range 1ms .. 4ms;
+            C.WarnAck_C.WCET            range 1ms .. 4ms;
+            B.AcksCollected_B.WCET      range 1ms .. 5ms;
+            B.Planner_B.WCET            range 8ms .. 18ms;
+            B.Controller_B.WCET         range 15ms .. 28ms;
+
+            BroadcastA.latency_budget   range 6ms .. 18ms;
+            BroadcastC.latency_budget   range 6ms .. 18ms;
+            CollectA.latency_budget     range 6ms .. 18ms;
+            CollectC.latency_budget     range 6ms .. 18ms;
+            PlanTrig.latency_budget     range 3ms .. 8ms;
+            CtrlTrig.latency_budget     range 60ms .. 110ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}

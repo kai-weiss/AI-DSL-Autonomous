@@ -1,0 +1,101 @@
+// Scenario 3: Intersection Crossing (Hard) with roadside coordinator
+
+SYSTEM Intersection_Hard {
+    CPU {
+        cores       = 1;
+        scheduler   = LIMITED_PREEMPTIVE_FP;
+        class_order = [ SafetyCritical > Chain > BestEffort ];
+    }
+
+    VEHICLE R { // Roadside coordinator (RSU)
+        COMPONENT SlotAssign_R {
+            period   = 20ms;
+            deadline = 25ms;
+            WCET     = 6ms;
+            class    = Chain;
+            priority = 3;
+        }
+    }
+
+    VEHICLE A { // Cross traffic peer
+        COMPONENT CrossAck_A {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 4;
+        }
+    }
+
+    VEHICLE B { // Our vehicle
+        COMPONENT Perception_B {
+            period   = 40ms;
+            deadline = 45ms;
+            WCET     = 10ms;
+            class    = BestEffort;
+            priority = 10;
+        }
+        COMPONENT CrossReqTx_B {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 2;
+        }
+        COMPONENT SlotAssignRx_B {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 5;
+        }
+        COMPONENT Planner_B {
+            period   = 15ms;
+            deadline = 20ms;
+            WCET     = 12ms;
+            class    = Chain;
+            priority = 6;
+        }
+        COMPONENT Controller_B {
+            WCET     = 22ms;
+            deadline = 30ms;
+            class    = Chain;
+            priority = 7;
+        }
+    }
+
+    // Multi-hop: B -> R -> A (ack) -> B
+    CONNECT CrossReq:   B.CrossReqTx_B.output -> R.SlotAssign_R.input     { latency_budget = 10ms; }
+    CONNECT NotifyPeer: R.SlotAssign_R.output -> A.CrossAck_A.input       { latency_budget = 10ms; }
+    CONNECT SlotAssign: R.SlotAssign_R.output -> B.SlotAssignRx_B.input   { latency_budget = 10ms; }
+    CONNECT PlanTrig:   B.SlotAssignRx_B.output -> B.Planner_B.input      { latency_budget = 4ms; }
+    CONNECT CtrlTrig:   B.Planner_B.output      -> B.Controller_B.input   { latency_budget = 90ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE CrossReqTx_B
+               -> SlotAssign_R
+               -> SlotAssignRx_B
+               -> Planner_B
+               -> Controller_B
+       WITHIN 200ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            R.SlotAssign_R.period         range 10ms .. 30ms;
+            B.Perception_B.period         range 30ms .. 60ms;
+            B.Planner_B.period            range 10ms .. 30ms;
+
+            R.SlotAssign_R.WCET           range 4ms .. 10ms;
+            A.CrossAck_A.WCET             range 1ms .. 5ms;
+            B.CrossReqTx_B.WCET           range 1ms .. 5ms;
+            B.SlotAssignRx_B.WCET         range 1ms .. 5ms;
+            B.Planner_B.WCET              range 8ms .. 18ms;
+            B.Controller_B.WCET           range 15ms .. 28ms;
+
+            CrossReq.latency_budget       range 6ms .. 18ms;
+            NotifyPeer.latency_budget     range 6ms .. 18ms;
+            SlotAssign.latency_budget     range 6ms .. 18ms;
+            PlanTrig.latency_budget       range 3ms .. 8ms;
+            CtrlTrig.latency_budget       range 70ms .. 120ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}

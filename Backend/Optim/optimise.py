@@ -325,6 +325,6 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
 
 
 if __name__ == "__main__":
-    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/2.adsl", generations=10, algorithm="sms-emoa")
+    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="sms-emoa")
     # print(m)
     print("Best individual:", ind.values, ind.objectives)

@@ -1,0 +1,80 @@
+// Scenario 3: Intersection Crossing (Easy)
+
+SYSTEM Intersection_Easy {
+    CPU {
+        cores     = 1;
+        scheduler = PREEMPTIVE_FP;
+    }
+
+    VEHICLE A { // Cross traffic
+        COMPONENT SlotGrant_A {
+            WCET     = 3ms;
+            deadline = 12ms;
+            priority = 3;
+        }
+    }
+
+    VEHICLE B { // Our vehicle
+        COMPONENT Perception_B {
+            period   = 50ms;
+            deadline = 50ms;
+            WCET     = 8ms;
+            priority = 1;
+        }
+        COMPONENT CrossReqTx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 2;
+        }
+        COMPONENT SlotGrantRx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 4;
+        }
+        COMPONENT Planner_B {
+            period   = 20ms;
+            deadline = 20ms;
+            WCET     = 8ms;
+            priority = 5;
+        }
+        COMPONENT Controller_B {
+            WCET     = 15ms;
+            deadline = 25ms;
+            priority = 6;
+        }
+    }
+
+    CONNECT CrossReq:   B.CrossReqTx_B.output -> A.SlotGrant_A.input   { latency_budget = 8ms; }
+    CONNECT SlotGrant:  A.SlotGrant_A.output  -> B.SlotGrantRx_B.input { latency_budget = 8ms; }
+    CONNECT PlanTrig:   B.SlotGrantRx_B.output -> B.Planner_B.input    { latency_budget = 3ms; }
+    CONNECT CtrlTrig:   B.Planner_B.output     -> B.Controller_B.input { latency_budget = 60ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE CrossReqTx_B
+               -> SlotGrant_A
+               -> SlotGrantRx_B
+               -> Planner_B
+               -> Controller_B
+       WITHIN 130ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            B.Perception_B.period         range 35ms .. 70ms;
+            B.Planner_B.period            range 10ms .. 30ms;
+
+            B.Perception_B.WCET           range 5ms .. 12ms;
+            B.CrossReqTx_B.WCET           range 1ms .. 4ms;
+            A.SlotGrant_A.WCET            range 1ms .. 5ms;
+            B.SlotGrantRx_B.WCET          range 1ms .. 4ms;
+            B.Planner_B.WCET              range 6ms .. 12ms;
+            B.Controller_B.WCET           range 10ms .. 20ms;
+
+            CrossReq.latency_budget       range 4ms .. 16ms;
+            SlotGrant.latency_budget      range 4ms .. 16ms;
+            PlanTrig.latency_budget       range 2ms .. 6ms;
+            CtrlTrig.latency_budget       range 40ms .. 80ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}

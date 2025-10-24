@@ -1,0 +1,82 @@
+// Scenario 4: Platooning (Easy) — join & keep-gap
+
+SYSTEM Platooning_Easy {
+    CPU {
+        cores     = 1;
+        scheduler = PREEMPTIVE_FP;
+    }
+
+    VEHICLE A { // Leader
+        COMPONENT PlatoonCmd_A {
+            WCET     = 3ms;
+            deadline = 12ms;
+            priority = 3;
+        }
+    }
+
+    VEHICLE B { // Joiner/Follower
+        COMPONENT Perception_B {
+            period   = 40ms;
+            deadline = 40ms;
+            WCET     = 8ms;
+            priority = 1;
+        }
+        COMPONENT JoinReqTx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 2;
+        }
+        COMPONENT PlatoonCmdRx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 4;
+        }
+        COMPONENT LongitudinalPlanner_B {
+            period   = 20ms;
+            deadline = 20ms;
+            WCET     = 8ms;
+            priority = 5;
+        }
+        COMPONENT LongitudinalController_B {
+            period   = 10ms;
+            deadline = 10ms;
+            WCET     = 5ms;
+            priority = 6;
+        }
+    }
+
+    CONNECT JoinReq:  B.JoinReqTx_B.output     -> A.PlatoonCmd_A.input       { latency_budget = 8ms; }
+    CONNECT JoinCmd:  A.PlatoonCmd_A.output    -> B.PlatoonCmdRx_B.input     { latency_budget = 8ms; }
+    CONNECT PlanTrig: B.PlatoonCmdRx_B.output  -> B.LongitudinalPlanner_B.input { latency_budget = 3ms; }
+    CONNECT CtrlTrig: B.LongitudinalPlanner_B.output -> B.LongitudinalController_B.input { latency_budget = 15ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE JoinReqTx_B
+               -> PlatoonCmd_A
+               -> PlatoonCmdRx_B
+               -> LongitudinalPlanner_B
+               -> LongitudinalController_B
+       WITHIN 90ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            B.Perception_B.period             range 30ms .. 60ms;
+            B.LongitudinalPlanner_B.period    range 10ms .. 30ms;
+            B.LongitudinalController_B.period range 8ms  .. 15ms;
+
+            B.Perception_B.WCET               range 5ms .. 12ms;
+            B.JoinReqTx_B.WCET                range 1ms .. 4ms;
+            A.PlatoonCmd_A.WCET               range 1ms .. 5ms;
+            B.PlatoonCmdRx_B.WCET             range 1ms .. 4ms;
+            B.LongitudinalPlanner_B.WCET      range 6ms .. 12ms;
+            B.LongitudinalController_B.WCET   range 3ms .. 8ms;
+
+            JoinReq.latency_budget            range 4ms .. 16ms;
+            JoinCmd.latency_budget            range 4ms .. 16ms;
+            PlanTrig.latency_budget           range 2ms .. 6ms;
+            CtrlTrig.latency_budget           range 10ms .. 25ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}

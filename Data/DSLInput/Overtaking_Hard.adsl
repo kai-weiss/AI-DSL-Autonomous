@@ -1,14 +1,20 @@
-// Cooperative Overtaking DSL Model
+// Scenario 1: Cooperative Overtaking (Hard)
 
-SYSTEM CooperativeOvertaking {
-    //Global scheduling assumptions
+SYSTEM Overtaking_Hard {
     CPU {
-        cores      = 1;
-        scheduler  = LIMITED_PREEMPTIVE_FP;
-        class_order  = [ SafetyCritical > Chain > BestEffort ];
+        cores       = 1;
+        scheduler   = LIMITED_PREEMPTIVE_FP;
+        class_order = [ SafetyCritical > Chain > BestEffort ];
     }
 
     VEHICLE A {
+        COMPONENT Perception_A {
+            period   = 40ms;
+            deadline = 50ms;
+            WCET     = 10ms;
+            class    = BestEffort;
+            priority = 5;
+        }
         COMPONENT InteriorLight_A {
             period = 40ms;
             deadline = 60ms;
@@ -73,7 +79,7 @@ SYSTEM CooperativeOvertaking {
 
     // Internal connections on vehicle B
     CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input { latency_budget = 3ms; }
-    CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input { latency_budget = 100ms; }
+    CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input { latency_budget = 80ms; }
 
 
     PROPERTY EndToEndLatency:
@@ -82,33 +88,30 @@ SYSTEM CooperativeOvertaking {
                -> PermissionAckRx_B
                -> TrajectoryPlanner_B
                -> Controller_B
-       WITHIN 169ms";
+       WITHIN 149ms";
 
     OPTIMISATION {
         VARIABLES {
-            A.Perception_A.period    range 33ms .. 50ms;
-            A.Perception_A.WCET      range 5ms .. 15ms;
-            A.AckHandler_A.WCET      range 1ms .. 4ms;
-
-            B.Perception_B.period         range 33ms .. 50ms;
-            B.Perception_B.WCET           range 5ms .. 15ms;
-            B.PermissionReqTx_B.WCET      range 1ms .. 4ms;
-            B.PermissionAckRx_B.WCET      range 1ms .. 4ms;
-
+            A.Perception_A.period          range 33ms .. 60ms;
+            B.Perception_B.period          range 33ms .. 60ms;
+            B.SafetyMonitor_B.period       range 15ms .. 30ms;
             B.TrajectoryPlanner_B.period   range 10ms .. 30ms;
-            B.TrajectoryPlanner_B.WCET     range 10ms .. 30ms;
-            B.Controller_B.WCET            range 3ms .. 7ms;
 
-            OvertakeRequest.latency_budget range 4ms .. 16ms;
-            PermissionAck.latency_budget   range 4ms .. 16ms;
+            A.Perception_A.WCET            range 6ms .. 15ms;
+            B.Perception_B.WCET            range 6ms .. 15ms;
+            B.SafetyMonitor_B.WCET         range 3ms .. 8ms;
+            B.PermissionReqTx_B.WCET       range 1ms .. 5ms;
+            A.AckHandler_A.WCET            range 1ms .. 5ms;
+            B.PermissionAckRx_B.WCET       range 1ms .. 5ms;
+            B.TrajectoryPlanner_B.WCET     range 8ms .. 18ms;
+            B.Controller_B.WCET            range 15ms .. 30ms;
+
+            OvertakeRequest.latency_budget   range 4ms .. 16ms;
+            PermissionAck.latency_budget     range 4ms .. 16ms;
+            PlanTrigger.latency_budget       range 2ms .. 6ms;
+            ControllerTrigger.latency_budget range 60ms .. 110ms;
         }
-        OBJECTIVES{
-            minimise worst_end2end_latency;
-            minimise max_core_utilisation;
-        }
-        CONSTRAINTS{
-            assert EndToEndLatency;          // re-use the PROPERTY
-            assert deadline_misses == 0;
-        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
     }
 }

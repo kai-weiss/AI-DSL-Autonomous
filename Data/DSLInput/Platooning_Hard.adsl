@@ -1,0 +1,111 @@
+// Scenario 4: Platooning (Hard) — 3 vehicles, coordinated join
+
+SYSTEM Platooning_Hard {
+    CPU {
+        cores       = 1;
+        scheduler   = LIMITED_PREEMPTIVE_FP;
+        class_order = [ SafetyCritical > Chain > BestEffort ];
+    }
+
+    VEHICLE A { // Leader
+        COMPONENT PlatoonCfg_A {
+            WCET     = 4ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 3;
+        }
+    }
+
+    VEHICLE B { // Existing follower
+        COMPONENT ConfigRx_B {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 5;
+        }
+        COMPONENT Controller_B {
+            period   = 10ms;
+            deadline = 12ms;
+            WCET     = 6ms;
+            class    = Chain;
+            priority = 7;
+        }
+    }
+
+    VEHICLE C { // New joiner
+        COMPONENT Perception_C {
+            period   = 40ms;
+            deadline = 45ms;
+            WCET     = 10ms;
+            class    = BestEffort;
+            priority = 10;
+        }
+        COMPONENT JoinReqTx_C {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 2;
+        }
+        COMPONENT ConfigRx_C {
+            WCET     = 3ms;
+            deadline = 12ms;
+            class    = Chain;
+            priority = 6;
+        }
+        COMPONENT Planner_C {
+            period   = 15ms;
+            deadline = 20ms;
+            WCET     = 12ms;
+            class    = Chain;
+            priority = 8;
+        }
+        COMPONENT Controller_C {
+            period   = 10ms;
+            deadline = 12ms;
+            WCET     = 7ms;
+            class    = Chain;
+            priority = 9;
+        }
+    }
+
+    // Join propagation: C -> A -> (B and C)
+    CONNECT JoinReq:     C.JoinReqTx_C.output -> A.PlatoonCfg_A.input     { latency_budget = 10ms; }
+    CONNECT ConfigToB:   A.PlatoonCfg_A.output -> B.ConfigRx_B.input      { latency_budget = 10ms; }
+    CONNECT ConfigToC:   A.PlatoonCfg_A.output -> C.ConfigRx_C.input      { latency_budget = 10ms; }
+    CONNECT PlanTrig:    C.ConfigRx_C.output  -> C.Planner_C.input        { latency_budget = 4ms; }
+    CONNECT CtrlTrigC:   C.Planner_C.output   -> C.Controller_C.input     { latency_budget = 15ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE JoinReqTx_C
+               -> PlatoonCfg_A
+               -> ConfigRx_C
+               -> Planner_C
+               -> Controller_C
+       WITHIN 150ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            C.Perception_C.period          range 30ms .. 60ms;
+            C.Planner_C.period             range 10ms .. 30ms;
+            C.Controller_C.period          range 8ms  .. 15ms;
+            B.Controller_B.period          range 8ms  .. 15ms;
+
+            C.Perception_C.WCET            range 6ms .. 15ms;
+            C.JoinReqTx_C.WCET             range 1ms .. 5ms;
+            A.PlatoonCfg_A.WCET            range 2ms .. 6ms;
+            B.ConfigRx_B.WCET              range 1ms .. 5ms;
+            C.ConfigRx_C.WCET              range 1ms .. 5ms;
+            C.Planner_C.WCET               range 8ms .. 18ms;
+            C.Controller_C.WCET            range 4ms .. 10ms;
+            B.Controller_B.WCET            range 4ms .. 10ms;
+
+            JoinReq.latency_budget         range 6ms .. 18ms;
+            ConfigToB.latency_budget       range 6ms .. 18ms;
+            ConfigToC.latency_budget       range 6ms .. 18ms;
+            PlanTrig.latency_budget        range 3ms .. 8ms;
+            CtrlTrigC.latency_budget       range 10ms .. 25ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}

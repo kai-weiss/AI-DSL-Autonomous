@@ -2,6 +2,7 @@
 <!DOCTYPE nta PUBLIC "-//Uppaal Team//DTD Flat System 1.5//EN" "http://www.it.uu.se/research/group/darts/uppaal/flat-1_5.dtd">
 <nta>
   <declaration>
+    broadcast chan start_Perception_A, done_Perception_A, preempt_Perception_A;
     broadcast chan start_InteriorLight_A, done_InteriorLight_A, preempt_InteriorLight_A;
     broadcast chan start_AckHandler_A, done_AckHandler_A, preempt_AckHandler_A;
     broadcast chan start_Crash_B, done_Crash_B, preempt_Crash_B;
@@ -9,6 +10,7 @@
     broadcast chan start_PermissionAckRx_B, done_PermissionAckRx_B, preempt_PermissionAckRx_B;
     broadcast chan start_TrajectoryPlanner_B, done_TrajectoryPlanner_B, preempt_TrajectoryPlanner_B;
     broadcast chan start_Controller_B, done_Controller_B, preempt_Controller_B;
+    broadcast chan release_Perception_A;
     broadcast chan release_InteriorLight_A;
     broadcast chan release_AckHandler_A;
     broadcast chan release_Crash_B;
@@ -16,15 +18,16 @@
     broadcast chan release_PermissionAckRx_B;
     broadcast chan release_TrajectoryPlanner_B;
     broadcast chan release_Controller_B;
-    const int NUM_COMPONENTS_A = 2;
-    const int IDX_InteriorLight_A = 0;
-    const int IDX_AckHandler_A = 1;
-    int priorities_A[NUM_COMPONENTS_A] = {10, 2};
+    const int NUM_COMPONENTS_A = 3;
+    const int IDX_Perception_A = 0;
+    const int IDX_InteriorLight_A = 1;
+    const int IDX_AckHandler_A = 2;
+    int priorities_A[NUM_COMPONENTS_A] = {5, 10, 2};
     bool ready_A[NUM_COMPONENTS_A];
     int running_A = -1;
-    int criticality_A[NUM_COMPONENTS_A] = {2, 1};
-    int thresholds_A[NUM_COMPONENTS_A] = {2, 1};
-    const int WCET_A[NUM_COMPONENTS_A] = {10, 2};
+    int criticality_A[NUM_COMPONENTS_A] = {2, 2, 1};
+    int thresholds_A[NUM_COMPONENTS_A] = {2, 2, 1};
+    const int WCET_A[NUM_COMPONENTS_A] = {10, 10, 2};
     int remaining_A[NUM_COMPONENTS_A];
     int next_A = -1;
     const int NUM_COMPONENTS_B = 5;
@@ -42,6 +45,68 @@
     int remaining_B[NUM_COMPONENTS_B];
     int next_B = -1;
   </declaration>
+  <template>
+    <name>Perception_A</name>
+    <declaration>clock x;
+clock slice;</declaration>
+    <location id="Perception_A_Idle">
+      <name>Idle</name>
+      <label kind="invariant">x &lt;= 40</label>
+    </location>
+    <location id="Perception_A_Ready">
+      <name>Ready</name>
+    </location>
+    <location id="Perception_A_Exec">
+      <name>Exec</name>
+      <label kind="invariant">slice &lt;= 1 &amp;&amp; x &lt;= 50</label>
+    </location>
+    <location id="Perception_A_DeadlineMiss">
+      <name>bad</name>
+    </location>
+    <init ref="Perception_A_Idle" />
+    <transition>
+      <source ref="Perception_A_Idle" />
+      <target ref="Perception_A_Ready" />
+      <label kind="synchronisation">release_Perception_A?</label>
+      <label kind="assignment">x = 0, slice = 0, ready_A[IDX_Perception_A] = true, remaining_A[IDX_Perception_A] = WCET_A[IDX_Perception_A]</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Ready" />
+      <target ref="Perception_A_Exec" />
+      <label kind="synchronisation">start_Perception_A?</label>
+      <label kind="assignment">slice = 0</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Exec" />
+      <target ref="Perception_A_Exec" />
+      <label kind="guard">running_A == IDX_Perception_A &amp;&amp; remaining_A[IDX_Perception_A] &gt; 0 &amp;&amp; slice == 1</label>
+      <label kind="assignment">slice = 0, remaining_A[IDX_Perception_A] = remaining_A[IDX_Perception_A] - 1</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Exec" />
+      <target ref="Perception_A_Idle" />
+      <label kind="guard">running_A == IDX_Perception_A &amp;&amp; remaining_A[IDX_Perception_A] == 0 &amp;&amp; slice == 0</label>
+      <label kind="synchronisation">done_Perception_A!</label>
+      <label kind="assignment">x = 0, slice = 0</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Exec" />
+      <target ref="Perception_A_Ready" />
+      <label kind="guard">running_A == IDX_Perception_A &amp;&amp; remaining_A[IDX_Perception_A] &gt; 0 &amp;&amp; slice == 0</label>
+      <label kind="synchronisation">preempt_Perception_A?</label>
+      <label kind="assignment">ready_A[IDX_Perception_A] = true</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Ready" />
+      <target ref="Perception_A_DeadlineMiss" />
+      <label kind="guard">x &gt; 50</label>
+    </transition>
+    <transition>
+      <source ref="Perception_A_Exec" />
+      <target ref="Perception_A_DeadlineMiss" />
+      <label kind="guard">x &gt; 50</label>
+    </transition>
+  </template>
   <template>
     <name>InteriorLight_A</name>
     <declaration>clock x;
@@ -472,6 +537,22 @@ clock slice;</declaration>
     </transition>
   </template>
   <template>
+    <name>Timer_Perception_A</name>
+    <declaration>clock t;</declaration>
+    <location id="Timer_Perception_A_Wait">
+      <name>Wait</name>
+      <label kind="invariant">t &lt;= 40</label>
+    </location>
+    <init ref="Timer_Perception_A_Wait" />
+    <transition>
+      <source ref="Timer_Perception_A_Wait" />
+      <target ref="Timer_Perception_A_Wait" />
+      <label kind="guard">t == 40</label>
+      <label kind="synchronisation">release_Perception_A!</label>
+      <label kind="assignment">t = 0</label>
+    </transition>
+  </template>
+  <template>
     <name>Timer_InteriorLight_A</name>
     <declaration>clock t;</declaration>
     <location id="Timer_InteriorLight_A_Wait">
@@ -630,6 +711,11 @@ clock slice;</declaration>
     <transition>
       <source ref="Scheduler_A_Idle" />
       <target ref="Scheduler_A_Evaluate" />
+      <label kind="synchronisation">release_Perception_A?</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Idle" />
+      <target ref="Scheduler_A_Evaluate" />
       <label kind="synchronisation">release_InteriorLight_A?</label>
     </transition>
     <transition>
@@ -640,12 +726,12 @@ clock slice;</declaration>
     <transition>
       <source ref="Scheduler_A_Idle" />
       <target ref="Scheduler_A_Evaluate" />
-      <label kind="guard">ready_A[IDX_InteriorLight_A] || ready_A[IDX_AckHandler_A]</label>
+      <label kind="guard">ready_A[IDX_Perception_A] || ready_A[IDX_InteriorLight_A] || ready_A[IDX_AckHandler_A]</label>
     </transition>
     <transition>
       <source ref="Scheduler_A_Evaluate" />
       <target ref="Scheduler_A_Idle" />
-      <label kind="guard">running_A == -1 &amp;&amp; !(ready_A[IDX_InteriorLight_A] || ready_A[IDX_AckHandler_A])</label>
+      <label kind="guard">running_A == -1 &amp;&amp; !(ready_A[IDX_Perception_A] || ready_A[IDX_InteriorLight_A] || ready_A[IDX_AckHandler_A])</label>
       <label kind="assignment">next_A = -1</label>
     </transition>
     <transition>
@@ -657,7 +743,13 @@ clock slice;</declaration>
     <transition>
       <source ref="Scheduler_A_Evaluate" />
       <target ref="Scheduler_A_Dispatch" />
-      <label kind="guard">running_A == -1 &amp;&amp; ready_A[IDX_InteriorLight_A] &amp;&amp; !ready_A[IDX_AckHandler_A]</label>
+      <label kind="guard">running_A == -1 &amp;&amp; ready_A[IDX_Perception_A] &amp;&amp; !ready_A[IDX_AckHandler_A]</label>
+      <label kind="assignment">next_A = IDX_Perception_A</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Evaluate" />
+      <target ref="Scheduler_A_Dispatch" />
+      <label kind="guard">running_A == -1 &amp;&amp; ready_A[IDX_InteriorLight_A] &amp;&amp; !ready_A[IDX_AckHandler_A] &amp;&amp; !ready_A[IDX_Perception_A]</label>
       <label kind="assignment">next_A = IDX_InteriorLight_A</label>
     </transition>
     <transition>
@@ -669,14 +761,27 @@ clock slice;</declaration>
     <transition>
       <source ref="Scheduler_A_Evaluate" />
       <target ref="Scheduler_A_Preempt" />
-      <label kind="guard">running_A != -1 &amp;&amp; ready_A[IDX_InteriorLight_A] &amp;&amp; criticality_A[IDX_InteriorLight_A] &lt; thresholds_A[running_A] &amp;&amp; !ready_A[IDX_AckHandler_A]</label>
+      <label kind="guard">running_A != -1 &amp;&amp; ready_A[IDX_Perception_A] &amp;&amp; criticality_A[IDX_Perception_A] &lt; thresholds_A[running_A] &amp;&amp; !ready_A[IDX_AckHandler_A]</label>
+      <label kind="assignment">next_A = IDX_Perception_A</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Evaluate" />
+      <target ref="Scheduler_A_Preempt" />
+      <label kind="guard">running_A != -1 &amp;&amp; ready_A[IDX_InteriorLight_A] &amp;&amp; criticality_A[IDX_InteriorLight_A] &lt; thresholds_A[running_A] &amp;&amp; !ready_A[IDX_AckHandler_A] &amp;&amp; !ready_A[IDX_Perception_A]</label>
       <label kind="assignment">next_A = IDX_InteriorLight_A</label>
     </transition>
     <transition>
       <source ref="Scheduler_A_Evaluate" />
       <target ref="Scheduler_A_Busy" />
-      <label kind="guard">running_A != -1 &amp;&amp; !((ready_A[IDX_InteriorLight_A] &amp;&amp; criticality_A[IDX_InteriorLight_A] &lt; thresholds_A[running_A]) || (ready_A[IDX_AckHandler_A] &amp;&amp; criticality_A[IDX_AckHandler_A] &lt; thresholds_A[running_A]))</label>
+      <label kind="guard">running_A != -1 &amp;&amp; !((ready_A[IDX_Perception_A] &amp;&amp; criticality_A[IDX_Perception_A] &lt; thresholds_A[running_A]) || (ready_A[IDX_InteriorLight_A] &amp;&amp; criticality_A[IDX_InteriorLight_A] &lt; thresholds_A[running_A]) || (ready_A[IDX_AckHandler_A] &amp;&amp; criticality_A[IDX_AckHandler_A] &lt; thresholds_A[running_A]))</label>
       <label kind="assignment">next_A = -1</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Preempt" />
+      <target ref="Scheduler_A_Dispatch" />
+      <label kind="guard">running_A == IDX_Perception_A</label>
+      <label kind="synchronisation">preempt_Perception_A!</label>
+      <label kind="assignment">ready_A[IDX_Perception_A] = true, running_A = -1</label>
     </transition>
     <transition>
       <source ref="Scheduler_A_Preempt" />
@@ -695,6 +800,13 @@ clock slice;</declaration>
     <transition>
       <source ref="Scheduler_A_Dispatch" />
       <target ref="Scheduler_A_Busy" />
+      <label kind="guard">next_A == IDX_Perception_A</label>
+      <label kind="synchronisation">start_Perception_A!</label>
+      <label kind="assignment">running_A = IDX_Perception_A, ready_A[IDX_Perception_A] = false, next_A = -1</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Dispatch" />
+      <target ref="Scheduler_A_Busy" />
       <label kind="guard">next_A == IDX_InteriorLight_A</label>
       <label kind="synchronisation">start_InteriorLight_A!</label>
       <label kind="assignment">running_A = IDX_InteriorLight_A, ready_A[IDX_InteriorLight_A] = false, next_A = -1</label>
@@ -709,12 +821,24 @@ clock slice;</declaration>
     <transition>
       <source ref="Scheduler_A_Busy" />
       <target ref="Scheduler_A_Evaluate" />
+      <label kind="synchronisation">release_Perception_A?</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Busy" />
+      <target ref="Scheduler_A_Evaluate" />
       <label kind="synchronisation">release_InteriorLight_A?</label>
     </transition>
     <transition>
       <source ref="Scheduler_A_Busy" />
       <target ref="Scheduler_A_Evaluate" />
       <label kind="synchronisation">release_AckHandler_A?</label>
+    </transition>
+    <transition>
+      <source ref="Scheduler_A_Busy" />
+      <target ref="Scheduler_A_Evaluate" />
+      <label kind="synchronisation">done_Perception_A?</label>
+      <label kind="guard">running_A == IDX_Perception_A</label>
+      <label kind="assignment">running_A = -1, next_A = -1</label>
     </transition>
     <transition>
       <source ref="Scheduler_A_Busy" />
@@ -1009,7 +1133,7 @@ clock slice;</declaration>
     </location>
     <location id="PipeObs_EndToEndLatency_Controller_B">
       <name>Wait_Controller_B</name>
-      <label kind="invariant">t &lt;= 169</label>
+      <label kind="invariant">t &lt;= 149</label>
     </location>
     <location id="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A">
       <name>Conn_PermissionReqTx_B_to_AckHandler_A</name>
@@ -1025,7 +1149,7 @@ clock slice;</declaration>
     </location>
     <location id="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B">
       <name>Conn_TrajectoryPlanner_B_to_Controller_B</name>
-      <label kind="invariant">t &lt;= 144 &amp;&amp; e &lt;= 100</label>
+      <label kind="invariant">t &lt;= 124 &amp;&amp; e &lt;= 80</label>
     </location>
     <location id="PipeObs_EndToEndLatency_Bad">
       <name>bad</name>
@@ -1097,7 +1221,7 @@ clock slice;</declaration>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">e == 100</label>
+      <label kind="guard">e == 80</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
@@ -1108,7 +1232,7 @@ clock slice;</declaration>
       <source ref="PipeObs_EndToEndLatency_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Done" />
       <label kind="synchronisation">done_Controller_B?</label>
-      <label kind="guard">t &lt;= 169</label>
+      <label kind="guard">t &lt;= 149</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_PermissionReqTx_B" />
@@ -1133,7 +1257,7 @@ clock slice;</declaration>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">t == 169</label>
+      <label kind="guard">t == 149</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_PermissionReqTx_B_to_AckHandler_A" />
@@ -1153,7 +1277,7 @@ clock slice;</declaration>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Conn_TrajectoryPlanner_B_to_Controller_B" />
       <target ref="PipeObs_EndToEndLatency_Bad" />
-      <label kind="guard">t == 144</label>
+      <label kind="guard">t == 124</label>
     </transition>
     <transition>
       <source ref="PipeObs_EndToEndLatency_Done" />
@@ -1161,6 +1285,7 @@ clock slice;</declaration>
     </transition>
   </template>
   <system>
+    P_Perception_A = Perception_A();
     P_InteriorLight_A = InteriorLight_A();
     P_AckHandler_A = AckHandler_A();
     P_Crash_B = Crash_B();
@@ -1168,6 +1293,7 @@ clock slice;</declaration>
     P_PermissionAckRx_B = PermissionAckRx_B();
     P_TrajectoryPlanner_B = TrajectoryPlanner_B();
     P_Controller_B = Controller_B();
+    T_Perception_A = Timer_Perception_A();
     T_InteriorLight_A = Timer_InteriorLight_A();
     D_Conn_PermissionReqTx_B_to_AckHandler_A = Conn_PermissionReqTx_B_to_AckHandler_A();
     D_Conn_AckHandler_A_to_PermissionAckRx_B = Conn_AckHandler_A_to_PermissionAckRx_B();
@@ -1178,6 +1304,6 @@ clock slice;</declaration>
     S_A = Scheduler_A();
     S_B = Scheduler_B();
     I_PipeObs_EndToEndLatency = PipeObs_EndToEndLatency();
-    system P_InteriorLight_A, P_AckHandler_A, P_Crash_B, P_PermissionReqTx_B, P_PermissionAckRx_B, P_TrajectoryPlanner_B, P_Controller_B, T_InteriorLight_A, D_Conn_PermissionReqTx_B_to_AckHandler_A, D_Conn_AckHandler_A_to_PermissionAckRx_B, D_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B, D_Conn_TrajectoryPlanner_B_to_Controller_B, I_Env_Crash_B, I_Env_PermissionReqTx_B, S_A, S_B, I_PipeObs_EndToEndLatency;
+    system P_Perception_A, P_InteriorLight_A, P_AckHandler_A, P_Crash_B, P_PermissionReqTx_B, P_PermissionAckRx_B, P_TrajectoryPlanner_B, P_Controller_B, T_Perception_A, T_InteriorLight_A, D_Conn_PermissionReqTx_B_to_AckHandler_A, D_Conn_AckHandler_A_to_PermissionAckRx_B, D_Conn_PermissionAckRx_B_to_TrajectoryPlanner_B, D_Conn_TrajectoryPlanner_B_to_Controller_B, I_Env_Crash_B, I_Env_PermissionReqTx_B, S_A, S_B, I_PipeObs_EndToEndLatency;
   </system>
 </nta>

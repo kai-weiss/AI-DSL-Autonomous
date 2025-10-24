@@ -1,0 +1,87 @@
+// Scenario 2: Lane Merge (Easy)
+
+SYSTEM LaneMerge_Easy {
+    CPU {
+        cores     = 1;
+        scheduler = PREEMPTIVE_FP;
+    }
+
+    VEHICLE A { // Main lane vehicle
+        COMPONENT GapEvaluator_A {
+            period   = 40ms;
+            deadline = 40ms;
+            WCET     = 8ms;
+            priority = 2;
+        }
+        COMPONENT MergeAckTx_A {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 3;
+        }
+    }
+
+    VEHICLE B { // On-ramp vehicle
+        COMPONENT Perception_B {
+            period   = 40ms;
+            deadline = 40ms;
+            WCET     = 8ms;
+            priority = 1;
+        }
+        COMPONENT MergeReqTx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 2;
+        }
+        COMPONENT MergeAckRx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 3;
+        }
+        COMPONENT Planner_B {
+            period   = 20ms;
+            deadline = 20ms;
+            WCET     = 8ms;
+            priority = 4;
+        }
+        COMPONENT Controller_B {
+            WCET     = 15ms;
+            deadline = 25ms;
+            priority = 5;
+        }
+    }
+
+    CONNECT MergeRequest: B.MergeReqTx_B.output -> A.GapEvaluator_A.input  { latency_budget = 8ms; }
+    CONNECT MergeAck:     A.MergeAckTx_A.output -> B.MergeAckRx_B.input    { latency_budget = 8ms; }
+    CONNECT PlanTrigger:  B.MergeAckRx_B.output -> B.Planner_B.input       { latency_budget = 3ms; }
+    CONNECT CtrlTrigger:  B.Planner_B.output    -> B.Controller_B.input    { latency_budget = 70ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE MergeReqTx_B
+               -> GapEvaluator_A
+               -> MergeAckRx_B
+               -> Planner_B
+               -> Controller_B
+       WITHIN 140ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            A.GapEvaluator_A.period        range 30ms .. 60ms;
+            B.Perception_B.period          range 30ms .. 60ms;
+            B.Planner_B.period             range 10ms .. 30ms;
+
+            A.GapEvaluator_A.WCET          range 5ms .. 12ms;
+            A.MergeAckTx_A.WCET            range 1ms .. 4ms;
+            B.MergeReqTx_B.WCET            range 1ms .. 4ms;
+            B.MergeAckRx_B.WCET            range 1ms .. 4ms;
+            B.Planner_B.WCET               range 6ms .. 12ms;
+            B.Controller_B.WCET            range 10ms .. 20ms;
+
+            MergeRequest.latency_budget    range 4ms .. 16ms;
+            MergeAck.latency_budget        range 4ms .. 16ms;
+            PlanTrigger.latency_budget     range 2ms .. 6ms;
+            CtrlTrigger.latency_budget     range 50ms .. 90ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}

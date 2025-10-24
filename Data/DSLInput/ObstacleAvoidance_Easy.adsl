@@ -1,0 +1,80 @@
+// Scenario 5: Obstacle Avoidance / Emergency Yield (Easy)
+
+SYSTEM ObstacleAvoidance_Easy {
+    CPU {
+        cores     = 1;
+        scheduler = PREEMPTIVE_FP;
+    }
+
+    VEHICLE A { // Neighbor
+        COMPONENT YieldAck_A {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 3;
+        }
+    }
+
+    VEHICLE B { // Our vehicle detects obstacle
+        COMPONENT Perception_B {
+            period   = 50ms;
+            deadline = 50ms;
+            WCET     = 8ms;
+            priority = 1;
+        }
+        COMPONENT YieldReqTx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 2;
+        }
+        COMPONENT YieldAckRx_B {
+            WCET     = 2ms;
+            deadline = 10ms;
+            priority = 4;
+        }
+        COMPONENT LocalPlanner_B {
+            period   = 20ms;
+            deadline = 20ms;
+            WCET     = 8ms;
+            priority = 5;
+        }
+        COMPONENT Controller_B {
+            WCET     = 15ms;
+            deadline = 25ms;
+            priority = 6;
+        }
+    }
+
+    CONNECT YieldReq:  B.YieldReqTx_B.output -> A.YieldAck_A.input     { latency_budget = 6ms; }
+    CONNECT YieldAck:  A.YieldAck_A.output   -> B.YieldAckRx_B.input    { latency_budget = 6ms; }
+    CONNECT PlanTrig:  B.YieldAckRx_B.output -> B.LocalPlanner_B.input  { latency_budget = 3ms; }
+    CONNECT CtrlTrig:  B.LocalPlanner_B.output -> B.Controller_B.input  { latency_budget = 50ms; }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE YieldReqTx_B
+               -> YieldAck_A
+               -> YieldAckRx_B
+               -> LocalPlanner_B
+               -> Controller_B
+       WITHIN 110ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            B.Perception_B.period       range 35ms .. 70ms;
+            B.LocalPlanner_B.period     range 10ms .. 30ms;
+
+            B.Perception_B.WCET         range 5ms .. 12ms;
+            B.YieldReqTx_B.WCET         range 1ms .. 4ms;
+            A.YieldAck_A.WCET           range 1ms .. 4ms;
+            B.YieldAckRx_B.WCET         range 1ms .. 4ms;
+            B.LocalPlanner_B.WCET       range 6ms .. 12ms;
+            B.Controller_B.WCET         range 10ms .. 20ms;
+
+            YieldReq.latency_budget     range 3ms .. 12ms;
+            YieldAck.latency_budget     range 3ms .. 12ms;
+            PlanTrig.latency_budget     range 2ms .. 6ms;
+            CtrlTrig.latency_budget     range 35ms .. 70ms;
+        }
+        OBJECTIVES { minimise worst_end2end_latency; minimise max_core_utilisation; }
+        CONSTRAINTS { assert EndToEndLatency; assert deadline_misses == 0; }
+    }
+}
