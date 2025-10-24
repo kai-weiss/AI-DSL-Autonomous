@@ -215,6 +215,12 @@ class ModelBuilder:
         # ------------------------------------------------------------------
         # Scheduler instance (fixed-priority dispatcher)
         # ------------------------------------------------------------------
+        scheduler_mode = "LIMITED_PREEMPTIVE_FP"
+        if cpu_cfg is not None:
+            raw_scheduler = getattr(cpu_cfg, "scheduler", None)
+            if raw_scheduler:
+                scheduler_mode = str(raw_scheduler).upper()
+
         for prefix, data in group_data.items():
             comps: List[Component] = data["components"]  # type: ignore[assignment]
             if not comps:
@@ -229,6 +235,7 @@ class ModelBuilder:
                 class_map,
                 threshold_map,
                 prefix,
+                scheduler_mode,
             )
             sys_inst.append(f"S_{prefix} = {sched_tpl}();")
 

@@ -74,7 +74,7 @@ SYSTEM CooperativeOvertaking {
                -> PermissionAckRx_B
                -> TrajectoryPlanner_B
                -> Controller_B
-       WITHIN 145ms";
+       WITHIN 160ms";
 
     OPTIMISATION {
         VARIABLES {

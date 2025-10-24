@@ -208,8 +208,12 @@ def emit_scheduler_template(
     class_map: Dict[str, int],
     threshold_map: Dict[str, int],
     prefix: str,
+    mode: str | None = None,
 ) -> str:
-    """Limited-preemption scheduler with class-aware ordering."""
+    """Emit a scheduler template according to the configured policy (Limited-preemption FP or preemption FP)."""
+
+    scheduler_mode = (mode or "LIMITED_PREEMPTIVE_FP").upper()
+    limited_preemptive = scheduler_mode != "PREEMPTIVE_FP"
 
     tpl_name = f"Scheduler_{prefix}"
     tpl = ET.SubElement(root, "template")
@@ -245,14 +249,21 @@ def emit_scheduler_template(
     next_var = f"next_{prefix}"
     criticality_arr = f"criticality_{prefix}"
     thresholds_arr = f"thresholds_{prefix}"
+    priority_arr = f"priorities_{prefix}"
 
     ready_terms = [f"{ready_arr}[IDX_{c.name}]" for c in components]
     some_ready = " || ".join(ready_terms)
 
-    outrank_terms = [
-        f"({ready_arr}[IDX_{c.name}] && {criticality_arr}[IDX_{c.name}] < {thresholds_arr}[{running_var}])"
-        for c in components
-    ]
+    if limited_preemptive:
+        outrank_terms = [
+            f"({ready_arr}[IDX_{c.name}] && {criticality_arr}[IDX_{c.name}] < {thresholds_arr}[{running_var}])"
+            for c in components
+        ]
+    else:
+        outrank_terms = [
+            f"({ready_arr}[IDX_{c.name}] && {priority_arr}[IDX_{c.name}] < {priority_arr}[{running_var}])"
+            for c in components
+        ]
     outrank_expr = " || ".join(outrank_terms)
 
     # Idle reacts to releases and queued work
@@ -296,11 +307,15 @@ def emit_scheduler_template(
 
     # Preemption when an eligible job outranks the running task
     for i, comp in enumerate(ordered):
-        guard_terms = [
-            f"{running_var} != -1",
-            f"{ready_arr}[IDX_{comp.name}]",
-            f"{criticality_arr}[IDX_{comp.name}] < {thresholds_arr}[{running_var}]",
-        ]
+        guard_terms = [f"{running_var} != -1", f"{ready_arr}[IDX_{comp.name}]"]
+        if limited_preemptive:
+            guard_terms.append(
+                f"{criticality_arr}[IDX_{comp.name}] < {thresholds_arr}[{running_var}]"
+            )
+        else:
+            guard_terms.append(
+                f"{priority_arr}[IDX_{comp.name}] < {priority_arr}[{running_var}]"
+            )
         for prev in ordered[:i]:
             guard_terms.append(f"!{ready_arr}[IDX_{prev.name}]")
         tr = ET.SubElement(tpl, "transition")
