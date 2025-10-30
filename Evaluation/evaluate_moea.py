@@ -156,13 +156,42 @@ class MemoisedEvaluator:
             self._misses += 1
             return result
 
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> Dict[str, float]:
         with self._lock:
-            return {
+            data: Dict[str, float] = {
                 "hits": self._hits,
                 "misses": self._misses,
                 "entries": len(self._cache),
             }
+
+        timing_data = self.timing_snapshot()
+        if timing_data is not None:
+            data.update(timing_data)
+            eval_total = timing_data["evaluate_seconds"]
+            verify_total = timing_data["verifyta_seconds"]
+            if eval_total > 0.0:
+                data["verifyta_percentage"] = (verify_total / eval_total) * 100.0
+
+        return data
+
+    def timing_snapshot(self) -> Dict[str, float] | None:
+        timing = getattr(self._evaluate, "_timings", None)
+        timing_lock = getattr(self._evaluate, "_timings_lock", None)
+        if timing is None or timing_lock is None:
+            return None
+
+        with timing_lock:
+            evaluate_total = float(timing.get("evaluate_total", 0.0))
+            evaluate_calls = int(timing.get("evaluate_calls", 0))
+            verify_total = float(timing.get("verifyta_total", 0.0))
+            verify_calls = int(timing.get("verifyta_calls", 0))
+
+        return {
+            "evaluate_seconds": evaluate_total,
+            "evaluate_calls": evaluate_calls,
+            "verifyta_seconds": verify_total,
+            "verifyta_calls": verify_calls,
+        }
 
 
 def _min_max_params(ref_set: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -280,10 +309,21 @@ def evaluate_algorithm(
     num_objectives = len(objectives)
 
     run_records = []
+
+    def _timing_delta(
+        after: Dict[str, float] | None,
+        before: Dict[str, float] | None,
+        key: str,
+    ) -> float:
+        if after is None or before is None:
+            return float("nan")
+        return after.get(key, 0.0) - before.get(key, 0.0)
+
     for r in range(runs):
         seed = 17 + r
         budget = gens * pop
         start = time.perf_counter()
+        timing_before = evaluator.timing_snapshot()
         plateau = None
         if num_objectives == 2:
             plateau = PlateauDetector(epsilon=PLATEAU_EPSILON, window=PLATEAU_WINDOW)
@@ -308,10 +348,37 @@ def evaluate_algorithm(
                 plateau=plateau,
             )
         runtime = time.perf_counter() - start
+        timing_after = evaluator.timing_snapshot()
         front = np.asarray(front, dtype=float)
         history = [np.asarray(h, dtype=float) for h in history]
         if front.size == 0:
             continue
+        if timing_before is None or timing_after is None:
+            eval_seconds = float("nan")
+            eval_calls = float("nan")
+            verify_seconds = float("nan")
+            verify_calls = float("nan")
+            verify_pct = float("nan")
+        else:
+            eval_seconds = _timing_delta(timing_after, timing_before, "evaluate_seconds")
+            verify_seconds = _timing_delta(timing_after, timing_before, "verifyta_seconds")
+            eval_calls = _timing_delta(timing_after, timing_before, "evaluate_calls")
+            verify_calls = _timing_delta(timing_after, timing_before, "verifyta_calls")
+
+            eval_seconds = max(0.0, eval_seconds)
+            verify_seconds = max(0.0, verify_seconds)
+            eval_calls = max(0.0, eval_calls)
+            verify_calls = max(0.0, verify_calls)
+
+            verify_pct = (
+                (verify_seconds / eval_seconds) * 100.0
+                if eval_seconds > 0.0
+                else float("nan")
+            )
+
+            eval_calls = int(round(eval_calls))
+            verify_calls = int(round(verify_calls))
+
         run_records.append(
             {
                 "run": r,
@@ -321,6 +388,11 @@ def evaluate_algorithm(
                 "evaluations": evaluations,
                 "stopped_early": stopped,
                 "generations_completed": len(history),
+                "evaluate_seconds": eval_seconds,
+                "evaluate_calls": eval_calls,
+                "verifyta_seconds": verify_seconds,
+                "verifyta_calls": verify_calls,
+                "verifyta_percentage": verify_pct,
             }
         )
 
@@ -331,7 +403,7 @@ def evaluate_algorithm(
 
 
 def main():
-    dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/DSL/Input/2.adsl"
+    dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
     algorithms = 'sms-emoa', 'nsga2', 'random_search'
     runs = 10
     generations = 80
@@ -388,6 +460,11 @@ def main():
                     "evaluations": rec["evaluations"],
                     "generations": rec["generations_completed"],
                     "stopped_early": rec["stopped_early"],
+                    "evaluate_time_s": rec.get("evaluate_seconds"),
+                    "evaluate_calls": rec.get("evaluate_calls"),
+                    "verifyta_time_s": rec.get("verifyta_seconds"),
+                    "verifyta_calls": rec.get("verifyta_calls"),
+                    "verifyta_pct": rec.get("verifyta_percentage"),
                 }
             )
 
@@ -412,6 +489,18 @@ def main():
         hv_ci = bootstrap_ci(df["HV"].to_numpy(), rng=rng)
         igd_ci = bootstrap_ci(df["IGD+"].to_numpy(), rng=rng)
         runtime_iqr = df["runtime_s"].quantile(0.75) - df["runtime_s"].quantile(0.25)
+        eval_time_med = df["evaluate_time_s"].median()
+        verify_time_med = df["verifyta_time_s"].median()
+        verify_pct_med = df["verifyta_pct"].median()
+        eval_calls_med = df["evaluate_calls"].median()
+        verify_calls_med = df["verifyta_calls"].median()
+        eval_calls_display = (
+            np.nan if pd.isna(eval_calls_med) else int(round(float(eval_calls_med)))
+        )
+        verify_calls_display = (
+            np.nan if pd.isna(verify_calls_med) else int(round(float(verify_calls_med)))
+        )
+        eval_calls_per_run = int(round(df["evaluations"].median()))
         summary_rows.append(
             {
                 "Algorithm": alg,
@@ -423,7 +512,12 @@ def main():
                 "IGD+ median 95% CI": _format_ci(igd_ci),
                 "Runtime (median s)": df["runtime_s"].median(),
                 "Runtime (IQR s)": runtime_iqr,
-                "Evaluations/run": int(df["evaluations"].median()),
+                "Evaluations/run": eval_calls_per_run,
+                "Eval time (median s)": eval_time_med,
+                "Eval calls/run": eval_calls_display,
+                "Verifyta time (median s)": verify_time_med,
+                "Verifyta calls/run": verify_calls_display,
+                "Verifyta share (median %)": verify_pct_med,
             }
         )
         print(f"Saved per-run metrics for {alg} → results_{alg}.csv")
@@ -438,6 +532,36 @@ def main():
         for alg, table in metric_tables.items():
             counts = sorted(table["evaluations"].unique())
             print(f"  {alg}: {counts}")
+
+        print("\nverifyta usage per algorithm:")
+        for alg, table in metric_tables.items():
+            if {
+                "verifyta_time_s",
+                "verifyta_calls",
+                "verifyta_pct",
+            } - set(table.columns):
+                print(f"  {alg}: verifyta metrics unavailable")
+                continue
+
+            verify_times = table["verifyta_time_s"]
+            verify_calls = table["verifyta_calls"]
+            verify_pct = table["verifyta_pct"]
+
+            if not (verify_times.notna().any() or verify_calls.notna().any()):
+                print(f"  {alg}: verifyta metrics unavailable")
+                continue
+
+            total_time = float(np.nansum(verify_times.to_numpy(dtype=float)))
+            total_calls = float(np.nansum(verify_calls.to_numpy(dtype=float)))
+            median_share = float(np.nanmedian(verify_pct.to_numpy(dtype=float)))
+            if math.isnan(median_share):
+                share_text = "median share n/a"
+            else:
+                share_text = f"median share {median_share:.2f}%"
+
+            print(
+                f"  {alg}: {total_calls:.0f} calls taking {total_time:.3f}s ({share_text})"
+            )
 
     convergence_df = pd.DataFrame(convergence_records)
     if not convergence_df.empty:
@@ -486,9 +610,31 @@ def main():
     cache_stats = evaluator.stats()
     print(
         "\nMemoised evaluator cache: "
-        f"{cache_stats['hits']} hits / {cache_stats['misses']} misses "
-        f"({cache_stats['entries']} unique assignments)"
+        f"{int(cache_stats['hits'])} hits / {int(cache_stats['misses'])} misses "
+        f"({int(cache_stats['entries'])} unique assignments)"
     )
+
+    eval_seconds = cache_stats.get("evaluate_seconds")
+    eval_calls = cache_stats.get("evaluate_calls")
+    verify_seconds = cache_stats.get("verifyta_seconds")
+    verify_calls = cache_stats.get("verifyta_calls")
+    verify_pct = cache_stats.get("verifyta_percentage")
+
+    if eval_seconds is not None and eval_calls is not None:
+        print(
+            "Evaluator runtime: "
+            f"{eval_seconds:.3f}s across {int(eval_calls)} executions"
+        )
+    if verify_seconds is not None and verify_calls is not None:
+        extra = (
+            f" ({verify_pct:.1f}% of evaluation time)"
+            if verify_pct is not None
+            else ""
+        )
+        print(
+            "  verifyta subprocess time: "
+            f"{verify_seconds:.3f}s across {int(verify_calls)} calls{extra}"
+        )
 
 
 if __name__ == "__main__":

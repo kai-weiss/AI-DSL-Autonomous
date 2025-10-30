@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, List, Callable
 from datetime import timedelta
 import random
+import time
+from threading import Lock
 
 from Backend.UPPAAL.UppaalVerifier import UppaalVerifier
 from DSL.parser import parse_source
@@ -241,22 +243,45 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
     verifier = UppaalVerifier()
     constraints = getattr(base_model.optimisation, "constraints", [])
 
+    timing_lock = Lock()
+    timings = {
+        "evaluate_total": 0.0,
+        "evaluate_calls": 0,
+        "verifyta_total": 0.0,
+        "verifyta_calls": 0,
+    }
+
     def evaluate(values: Dict[str, float]) -> List[float]:
-        assignments = {
-            name: timedelta(milliseconds=v) for name, v in values.items()
-        }
-        candidate = apply_values(base_model, assignments)
+        start_eval = time.perf_counter()
+        try:
+            assignments = {
+                name: timedelta(milliseconds=v) for name, v in values.items()
+            }
+            candidate = apply_values(base_model, assignments)
 
-        # Verify constraints via Uppaal (if available)
-        if constraints:
-            res = verifier.check(candidate, constraints)
-            if any(r is False or r is None for r in res.values()):
-                # Penalise invalid solutions heavily
-                return [1e9, 1e9]
+            # Verify constraints via Uppaal (if available)
+            if constraints:
+                verify_start = time.perf_counter()
+                res = verifier.check(candidate, constraints)
+                verify_elapsed = time.perf_counter() - verify_start
+                with timing_lock:
+                    timings["verifyta_total"] += verify_elapsed
+                    timings["verifyta_calls"] += 1
+                if any(r is False or r is None for r in res.values()):
+                    # Penalise invalid solutions heavily
+                    return [1e9, 1e9]
 
-        latency = _worst_end2end_latency(candidate)
-        utilisation = _max_core_utilisation(candidate)
-        return [latency, utilisation]
+            latency = _worst_end2end_latency(candidate)
+            utilisation = _max_core_utilisation(candidate)
+            return [latency, utilisation]
+        finally:
+            elapsed = time.perf_counter() - start_eval
+            with timing_lock:
+                timings["evaluate_total"] += elapsed
+                timings["evaluate_calls"] += 1
+
+    evaluate._timings = timings
+    evaluate._timings_lock = timing_lock
 
     return evaluate
 

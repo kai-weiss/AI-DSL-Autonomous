@@ -76,7 +76,7 @@ class UppaalVerifier:
                     text=True,
                 )
                 out_lower = proc.stdout.lower()
-                print(out_lower)
+                # print(out_lower)
                 results[prop_name] = (
                     "formula is satisfied" in out_lower or "pass" in out_lower
                 )
