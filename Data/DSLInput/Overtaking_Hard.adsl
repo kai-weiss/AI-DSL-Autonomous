@@ -2,7 +2,6 @@
 
 SYSTEM Overtaking_Hard {
     CPU {
-        cores       = 1;
         scheduler   = LIMITED_PREEMPTIVE_FP;
         class_order = [ SafetyCritical > Chain > BestEffort ];
     }

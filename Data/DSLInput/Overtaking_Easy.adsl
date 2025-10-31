@@ -2,7 +2,6 @@
 
 SYSTEM Overtaking_Easy {
     CPU {
-        cores     = 1;
         scheduler = PREEMPTIVE_FP;
     }
 
