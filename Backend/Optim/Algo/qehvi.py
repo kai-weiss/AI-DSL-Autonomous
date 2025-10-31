@@ -223,12 +223,16 @@ class QEHVIOptimizer:
                     ]
 
                 new_x_norm = candidates
-                new_obj = -torch.tensor(
+                evaluated_tensor = torch.tensor(
                     evaluated, dtype=self._dtype, device=self._device
                 )
+                valid_mask = ~(evaluated_tensor >= 1e8).any(dim=1)
+                filtered_x = new_x_norm[valid_mask]
+                filtered_obj = -evaluated_tensor[valid_mask]
 
-                train_x = torch.cat([train_x, new_x_norm], dim=0)
-                train_obj = torch.cat([train_obj, new_obj], dim=0)
+                if filtered_x.numel():
+                    train_x = torch.cat([train_x, filtered_x], dim=0)
+                    train_obj = torch.cat([train_obj, filtered_obj], dim=0)
 
                 for values, objs in zip(value_dicts, evaluated):
                     records.append(

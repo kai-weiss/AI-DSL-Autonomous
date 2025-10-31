@@ -6,6 +6,9 @@ from datetime import timedelta
 import random
 import time
 from threading import Lock
+import math
+
+import numpy as np
 
 from Backend.UPPAAL.UppaalVerifier import UppaalVerifier
 from DSL.parser import parse_source
@@ -240,9 +243,133 @@ def emit_model(model: Model) -> str:
     return "\n".join(cleaned) + "\n"
 
 
+class _GaussianStats:
+    """Welford updates for a single Gaussian-distributed feature."""
+
+    def __init__(self, n_features: int) -> None:
+        self.count = 0
+        self.mean = np.zeros(n_features, dtype=float)
+        self.m2 = np.zeros(n_features, dtype=float)
+
+    def update(self, sample: np.ndarray) -> None:
+        self.count += 1
+        delta = sample - self.mean
+        self.mean += delta / self.count
+        delta2 = sample - self.mean
+        self.m2 += delta * delta2
+
+    @property
+    def variance(self) -> np.ndarray:
+        if self.count <= 1:
+            return np.ones_like(self.mean)
+        return self.m2 / (self.count - 1)
+
+
+class _OnlineGaussianNB:
+    """A light-weight Naive Bayes classifier trained incrementally."""
+
+    def __init__(self, n_features: int, var_smoothing: float = 1e-6) -> None:
+        self.n_features = n_features
+        self.var_smoothing = var_smoothing
+        self._classes: Dict[bool, _GaussianStats] = {}
+
+    def partial_fit(self, x: np.ndarray, label: bool) -> None:
+        stats = self._classes.get(label)
+        if stats is None:
+            stats = _GaussianStats(self.n_features)
+            self._classes[label] = stats
+        stats.update(x)
+
+    def predict_proba(self, x: np.ndarray) -> float | None:
+        if len(self._classes) < 2:
+            return None
+
+        total = sum(stats.count for stats in self._classes.values())
+        if total == 0:
+            return None
+
+        log_probs: Dict[bool, float] = {}
+        for label, stats in self._classes.items():
+            if stats.count == 0:
+                continue
+            prior = stats.count / total
+            var = stats.variance + self.var_smoothing
+            log_likelihood = -0.5 * np.sum(
+                np.log(2 * math.pi * var) + ((x - stats.mean) ** 2) / var
+            )
+            log_probs[label] = math.log(prior) + log_likelihood
+
+        if len(log_probs) < 2:
+            return None
+
+        max_log = max(log_probs.values())
+        exp_probs = {k: math.exp(v - max_log) for k, v in log_probs.items()}
+        norm = sum(exp_probs.values())
+        if norm == 0:
+            return None
+        return exp_probs.get(True, 0.0) / norm
+
+    @property
+    def ready(self) -> bool:
+        return all(stats.count >= 3 for stats in self._classes.values())
+
+
+class _RidgeRegressor:
+    """Small ridge regressor solved via normal equations."""
+
+    def __init__(self, n_features: int, ridge: float = 1e-5, min_samples: int = 6) -> None:
+        self.n_features = n_features
+        self.ridge = ridge
+        self.min_samples = min_samples
+        self._X: list[np.ndarray] = []
+        self._y: list[float] = []
+        self._coef: np.ndarray | None = None
+
+    def add_sample(self, x: np.ndarray, y: float) -> None:
+        self._X.append(np.append(x, 1.0))
+        self._y.append(float(y))
+        if len(self._X) >= self.min_samples:
+            self._fit()
+
+    def _fit(self) -> None:
+        X = np.vstack(self._X)
+        y = np.array(self._y)
+        XtX = X.T @ X
+        XtX += self.ridge * np.eye(XtX.shape[0])
+        Xty = X.T @ y
+        self._coef = np.linalg.solve(XtX, Xty)
+
+    def predict(self, x: np.ndarray) -> float | None:
+        if self._coef is None:
+            return None
+        ext = np.append(x, 1.0)
+        return float(ext @ self._coef)
+
+    @property
+    def ready(self) -> bool:
+        return self._coef is not None
+
+
 def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float]]:
     verifier = UppaalVerifier()
     constraints = getattr(base_model.optimisation, "constraints", [])
+
+    bounds = variable_bounds(base_model.optimisation.variables)
+    var_names = list(bounds.keys())
+    ranges = {
+        name: max(bounds[name][1] - bounds[name][0], 1e-9) for name in var_names
+    }
+
+    def _normalise(values: Dict[str, float]) -> np.ndarray:
+        features = []
+        for name in var_names:
+            low, _ = bounds[name]
+            rng = ranges[name]
+            val = values.get(name, low)
+            norm = (val - low) / rng
+            norm = min(max(norm, 0.0), 1.0)
+            features.append(norm)
+        return np.array(features, dtype=float)
 
     timing_lock = Lock()
     timings = {
@@ -252,15 +379,73 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
         "verifyta_calls": 0,
     }
 
+    feasibility_filter = _OnlineGaussianNB(len(var_names))
+    regressors: list[_RidgeRegressor] = []
+    pareto_front: list[list[float]] = []
+    obj_mins: list[float] = []
+    obj_maxs: list[float] = []
+    domination_margin = 0.02
+
+    def _dominates(a: List[float], b: List[float], eps: float = 1e-9) -> bool:
+        return all(x <= y + eps for x, y in zip(a, b)) and any(
+            x < y - eps for x, y in zip(a, b)
+        )
+
+    def _update_pareto_front(point: List[float]) -> None:
+        nonlocal pareto_front
+        for existing in pareto_front:
+            if _dominates(existing, point):
+                return
+        new_front: list[list[float]] = []
+        for existing in pareto_front:
+            if not _dominates(point, existing):
+                new_front.append(existing)
+        new_front.append(point)
+        pareto_front = new_front
+
+    def _predicted_dominated(predicted: List[float]) -> bool:
+        if not pareto_front or not obj_mins or not obj_maxs:
+            return False
+        scales: list[float] = []
+        for mn, mx in zip(obj_mins, obj_maxs):
+            span = mx - mn
+            base = max(abs(mn), 1.0)
+            scales.append(span if span > 1e-6 else base)
+        for reference in pareto_front:
+            dominated = True
+            for idx, (pred, ref) in enumerate(zip(predicted, reference)):
+                margin = domination_margin * scales[idx]
+                if pred + margin < ref:
+                    dominated = False
+                    break
+            if dominated:
+                return True
+        return False
+
     def evaluate(values: Dict[str, float]) -> List[float]:
+        nonlocal regressors, obj_mins, obj_maxs
         start_eval = time.perf_counter()
+        features = _normalise(values)
+
         try:
+            if pareto_front and regressors and all(r.ready for r in regressors):
+                predicted = [r.predict(features) for r in regressors]
+                if all(p is not None for p in predicted) and _predicted_dominated(
+                    [float(p) for p in predicted]
+                ):
+                    return [1e9, 1e9]
+
+            if constraints and feasibility_filter.ready:
+                proba = feasibility_filter.predict_proba(features)
+                if proba is not None and proba < 0.25:
+                    return [1e9, 1e9]
+
             assignments = {
                 name: timedelta(milliseconds=v) for name, v in values.items()
             }
             candidate = apply_values(base_model, assignments)
 
-            # Verify constraints via Uppaal (if available)
+            feasible = True
             if constraints:
                 verify_start = time.perf_counter()
                 res = verifier.check(candidate, constraints)
@@ -268,13 +453,29 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
                 with timing_lock:
                     timings["verifyta_total"] += verify_elapsed
                     timings["verifyta_calls"] += 1
-                if any(r is False or r is None for r in res.values()):
-                    # Penalise invalid solutions heavily
+                feasible = not any(r is False or r is None for r in res.values())
+                feasibility_filter.partial_fit(features, feasible)
+                if not feasible:
                     return [1e9, 1e9]
+            else:
+                feasibility_filter.partial_fit(features, True)
 
             latency = _worst_end2end_latency(candidate)
             utilisation = _max_core_utilisation(candidate)
-            return [latency, utilisation]
+            objectives = [latency, utilisation]
+
+            if not regressors:
+                regressors = [_RidgeRegressor(len(var_names)) for _ in objectives]
+                obj_mins = [float("inf")] * len(objectives)
+                obj_maxs = [float("-inf")] * len(objectives)
+
+            for idx, (reg, target) in enumerate(zip(regressors, objectives)):
+                reg.add_sample(features, target)
+                obj_mins[idx] = min(obj_mins[idx], target)
+                obj_maxs[idx] = max(obj_maxs[idx], target)
+
+            _update_pareto_front(objectives)
+            return objectives
         finally:
             elapsed = time.perf_counter() - start_eval
             with timing_lock:
@@ -333,7 +534,16 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
             reverse=(direction == "max"),
         )
         # pick the first Individual whose id we haven’t used yet
-        best = next(ind for ind in pop_sorted if _ind_id(ind) not in chosen_ids)
+        best = next(
+            (ind for ind in pop_sorted if _ind_id(ind) not in chosen_ids),
+            None,
+        )
+        if best is None:
+            if not pop_sorted:
+                raise RuntimeError(
+                    "Optimiser returned an empty population; cannot select winner"
+                )
+            best = pop_sorted[0]
         chosen_ids.add(_ind_id(best))
 
         assignments = {
