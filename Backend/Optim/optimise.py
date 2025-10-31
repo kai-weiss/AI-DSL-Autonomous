@@ -14,6 +14,7 @@ from DSL.metamodel import Model
 from Backend.Optim.Algo.common import Individual
 from Backend.Optim.Algo.NSGA2 import NSGAII
 from Backend.Optim.Algo.SMSEMOA import SMSEMOA
+from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.model_ops import variable_bounds, apply_values, _enumerate_chains
 
 
@@ -289,6 +290,7 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
 ALGORITHMS = {
     "nsga2": NSGAII,
     "sms-emoa": SMSEMOA,
+    "qehvi": QEHVIOptimizer,
 }
 
 
@@ -350,6 +352,6 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
 
 
 if __name__ == "__main__":
-    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="sms-emoa")
+    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="qehvi")
     # print(m)
     print("Best individual:", ind.values, ind.objectives)
