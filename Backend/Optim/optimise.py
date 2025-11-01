@@ -20,6 +20,8 @@ from Backend.Optim.Algo.SMSEMOA import SMSEMOA
 from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.model_ops import variable_bounds, apply_values, _enumerate_chains
 
+VERIFYTA_EXPLORATION_PROB = 0.1
+
 
 def load_model(path: str) -> Model:
     source = Path(path).read_text(encoding="utf-8")
@@ -426,16 +428,28 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
         nonlocal regressors, obj_mins, obj_maxs
         start_eval = time.perf_counter()
         features = _normalise(values)
+        force_verify = bool(constraints) and (
+                random.random() < VERIFYTA_EXPLORATION_PROB
+        )
 
         try:
-            if pareto_front and regressors and all(r.ready for r in regressors):
+            if (
+                    not force_verify
+                    and pareto_front
+                    and regressors
+                    and all(r.ready for r in regressors)
+            ):
                 predicted = [r.predict(features) for r in regressors]
                 if all(p is not None for p in predicted) and _predicted_dominated(
-                    [float(p) for p in predicted]
+                        [float(p) for p in predicted]
                 ):
                     return [1e9, 1e9]
 
-            if constraints and feasibility_filter.ready:
+            if (
+                    constraints
+                    and feasibility_filter.ready
+                    and not force_verify
+            ):
                 proba = feasibility_filter.predict_proba(features)
                 if proba is not None and proba < 0.25:
                     return [1e9, 1e9]
@@ -562,6 +576,6 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
 
 
 if __name__ == "__main__":
-    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="qehvi")
+    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="nsga2")
     # print(m)
     print("Best individual:", ind.values, ind.objectives)
