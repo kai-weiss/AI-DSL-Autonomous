@@ -17,6 +17,7 @@ from DSL.metamodel import Model
 from Backend.Optim.Algo.common import Individual
 from Backend.Optim.Algo.NSGA2 import NSGAII
 from Backend.Optim.Algo.SMSEMOA import SMSEMOA
+from Backend.Optim.Algo.MOEAD import MOEAD
 from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.model_ops import variable_bounds, apply_values, _enumerate_chains
 
@@ -506,6 +507,7 @@ ALGORITHMS = {
     "nsga2": NSGAII,
     "sms-emoa": SMSEMOA,
     "qehvi": QEHVIOptimizer,
+    "moead": MOEAD,
 }
 
 

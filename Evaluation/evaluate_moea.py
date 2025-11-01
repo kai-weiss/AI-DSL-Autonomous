@@ -16,6 +16,7 @@ import pandas as pd
 from Backend.Optim.optimise import load_model, variable_bounds, make_evaluator
 from Backend.Optim.Algo.NSGA2 import NSGAII
 from Backend.Optim.Algo.SMSEMOA import SMSEMOA
+from Backend.Optim.Algo.MOEAD import MOEAD
 from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.Algo.common import PlateauDetector
 
@@ -117,6 +118,25 @@ def run_qehvi(bounds, evaluate, generations, pop_size, seed, *, workers=None, pl
     return final_front, history_fronts, evaluations, stopped
 
 
+def run_moead(bounds, evaluate, generations, pop_size, seed, *, workers=None, plateau=None):
+    random.seed(seed)
+    np.random.seed(seed)
+    alg = MOEAD(
+        bounds,
+        evaluate,
+        generations=generations,
+        pop_size=pop_size,
+        workers=workers,
+    )
+    pop, history, evaluations, stopped = alg.run(
+        log_history=True, plateau_detector=plateau
+    )
+    objs = [ind.objectives for ind in pop]
+    final_front = nondominated(objs)
+    history_fronts = [np.asarray(front, dtype=float) for front in history]
+    return final_front, history_fronts, evaluations, stopped
+
+
 def random_search(bounds, evaluate, budget, seed, generations, pop_size, *, plateau=None):
     rnd = random.Random(seed)
     objs: List[List[float]] = []
@@ -140,6 +160,7 @@ ALGORITHMS = {
     "nsga2": (run_nsga2, True),
     "sms-emoa": (run_sms_emoa, True),
     "qehvi": (run_qehvi, True),
+    "moead": (run_moead, True),
     "random_search": (random_search, False),
 }
 
@@ -464,7 +485,7 @@ def evaluate_algorithm(
 
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
-    # algorithms = 'sms-emoa', 'nsga2', 'random_search', 'qehvi'
+    # algorithms = 'sms-emoa', 'nsga2', 'random_search', 'qehvi', 'moead'
     algorithms = 'nsga2', 'sms-emoa', 'qehvi'
 
     # runs = 10
@@ -716,4 +737,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
