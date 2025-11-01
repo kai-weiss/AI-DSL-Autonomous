@@ -8,7 +8,7 @@ import random
 import time
 from pathlib import Path
 from threading import Lock
-from typing import Dict, Iterable, List, Tuple
+from typing import Callable, Dict, Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -104,7 +104,7 @@ def run_qehvi(bounds, evaluate, generations, pop_size, seed, *, workers=None, pl
         evaluate,
         generations=generations,
         pop_size=pop_size,
-        batch_size=pop_size,
+        batch_size=min(pop_size, 4),
         seed=seed,
         workers=workers,
     )
@@ -316,33 +316,40 @@ def _memoised_evaluator(evaluate, names):
 
 
 def evaluate_algorithm(
-    key: str,
-    bounds: Dict[str, Tuple[float, float]],
-    evaluator: MemoisedEvaluator,
-    runs: int,
-    gens: int,
-    pop: int,
-    *,
-    worker_threads: int | None = None,
+        key: str,
+        bounds: Dict[str, Tuple[float, float]],
+        num_objectives: int,
+        evaluator_factory: Callable[[], MemoisedEvaluator],
+        runs: int,
+        gens: int,
+        pop: int,
+        *,
+        worker_threads: int | None = None,
 ):
     runner, has_gens = ALGORITHMS[key]
 
-    sample = {n: (lo + hi) / 2 for n, (lo, hi) in bounds.items()}
-    objectives = evaluator(sample)
-    num_objectives = len(objectives)
-
     run_records = []
+    cache_totals = {
+        "hits": 0,
+        "misses": 0,
+        "entries": 0,
+        "evaluate_seconds": 0.0,
+        "evaluate_calls": 0.0,
+        "verifyta_seconds": 0.0,
+        "verifyta_calls": 0.0,
+    }
 
     def _timing_delta(
-        after: Dict[str, float] | None,
-        before: Dict[str, float] | None,
-        key: str,
+            after: Dict[str, float] | None,
+            before: Dict[str, float] | None,
+            key: str,
     ) -> float:
         if after is None or before is None:
             return float("nan")
         return after.get(key, 0.0) - before.get(key, 0.0)
 
     for r in range(runs):
+        evaluator = evaluator_factory()
         seed = 17 + r
         budget = gens * pop
         start = time.perf_counter()
@@ -419,40 +426,83 @@ def evaluate_algorithm(
             }
         )
 
+        cache_stats = evaluator.stats()
+        cache_totals["hits"] += int(cache_stats.get("hits", 0) or 0)
+        cache_totals["misses"] += int(cache_stats.get("misses", 0) or 0)
+        cache_totals["entries"] += int(cache_stats.get("entries", 0) or 0)
+
+        eval_seconds_total = cache_stats.get("evaluate_seconds")
+        if isinstance(eval_seconds_total, (int, float)) and not math.isnan(
+                float(eval_seconds_total)
+        ):
+            cache_totals["evaluate_seconds"] += float(eval_seconds_total)
+
+        eval_calls_total = cache_stats.get("evaluate_calls")
+        if isinstance(eval_calls_total, (int, float)) and not math.isnan(
+                float(eval_calls_total)
+        ):
+            cache_totals["evaluate_calls"] += float(eval_calls_total)
+
+        verify_seconds_total = cache_stats.get("verifyta_seconds")
+        if isinstance(verify_seconds_total, (int, float)) and not math.isnan(
+                float(verify_seconds_total)
+        ):
+            cache_totals["verifyta_seconds"] += float(verify_seconds_total)
+
+        verify_calls_total = cache_stats.get("verifyta_calls")
+        if isinstance(verify_calls_total, (int, float)) and not math.isnan(
+                float(verify_calls_total)
+        ):
+            cache_totals["verifyta_calls"] += float(verify_calls_total)
+
     return {
         "runs": run_records,
         "has_generations": has_gens,
+        "cache_totals": cache_totals,
     }
 
 
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
     # algorithms = 'sms-emoa', 'nsga2', 'random_search', 'qehvi'
-    algorithms = 'sms-emoa', 'qehvi'
+    algorithms = 'nsga2', 'sms-emoa', 'qehvi'
 
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 1
-    generations = 10
-    pop = 10
+    runs = 10
+    generations = 80
+    pop = 60
     worker_threads = os.cpu_count() or 1
     print(os.cpu_count())
 
     model = load_model(dsl)
     bounds = variable_bounds(model.optimisation.variables)
-    base_evaluator = make_evaluator(model)
-    evaluator = MemoisedEvaluator(base_evaluator, bounds.keys())
+    var_names = tuple(bounds.keys())
+    num_objectives = len(model.optimisation.objectives)
+
+    def evaluator_factory() -> MemoisedEvaluator:
+        return MemoisedEvaluator(make_evaluator(model), var_names)
 
     results = {}
     all_fronts: List[np.ndarray] = []
+    overall_cache_totals = {
+        "hits": 0,
+        "misses": 0,
+        "entries": 0,
+        "evaluate_seconds": 0.0,
+        "evaluate_calls": 0.0,
+        "verifyta_seconds": 0.0,
+        "verifyta_calls": 0.0,
+    }
     for alg in algorithms:
         if alg not in ALGORITHMS:
             raise ValueError(f"Unknown algorithm '{alg}'")
         data = evaluate_algorithm(
             alg,
             bounds,
-            evaluator,
+            num_objectives,
+            evaluator_factory,
             runs,
             generations,
             pop,
@@ -461,6 +511,9 @@ def main():
         results[alg] = data
         for rec in data["runs"]:
             all_fronts.append(rec["front"])
+        totals = data.get("cache_totals") or {}
+        for key in overall_cache_totals:
+            overall_cache_totals[key] += totals.get(key, 0)
 
     ref_set = nondominated(np.vstack(all_fronts))
     ref_point = np.max(ref_set, axis=0) * 1.1
@@ -635,35 +688,32 @@ def main():
         print("\n=== Wilcoxon signed-rank tests ===")
         print(tests_df.to_markdown(index=False, floatfmt=".4g"))
 
-    cache_stats = evaluator.stats()
     print(
         "\nMemoised evaluator cache: "
-        f"{int(cache_stats['hits'])} hits / {int(cache_stats['misses'])} misses "
-        f"({int(cache_stats['entries'])} unique assignments)"
+        f"{int(overall_cache_totals['hits'])} hits / "
+        f"{int(overall_cache_totals['misses'])} misses "
+        f"({int(overall_cache_totals['entries'])} unique assignments across all runs)"
     )
 
-    eval_seconds = cache_stats.get("evaluate_seconds")
-    eval_calls = cache_stats.get("evaluate_calls")
-    verify_seconds = cache_stats.get("verifyta_seconds")
-    verify_calls = cache_stats.get("verifyta_calls")
-    verify_pct = cache_stats.get("verifyta_percentage")
+    eval_seconds = float(overall_cache_totals["evaluate_seconds"])
+    eval_calls = int(round(overall_cache_totals["evaluate_calls"]))
+    verify_seconds = float(overall_cache_totals["verifyta_seconds"])
+    verify_calls = int(round(overall_cache_totals["verifyta_calls"]))
 
-    if eval_seconds is not None and eval_calls is not None:
-        print(
-            "Evaluator runtime: "
-            f"{eval_seconds:.3f}s across {int(eval_calls)} executions"
-        )
-    if verify_seconds is not None and verify_calls is not None:
-        extra = (
-            f" ({verify_pct:.1f}% of evaluation time)"
-            if verify_pct is not None
-            else ""
-        )
-        print(
-            "  verifyta subprocess time: "
-            f"{verify_seconds:.3f}s across {int(verify_calls)} calls{extra}"
-        )
+    print(
+        "Evaluator runtime: "
+        f"{eval_seconds:.3f}s across {eval_calls} executions"
+    )
+    share = None
+    if eval_seconds > 0.0:
+        share = (verify_seconds / eval_seconds) * 100.0
+    extra = f" ({share:.1f}% of evaluation time)" if share is not None else ""
+    print(
+        "  verifyta subprocess time: "
+        f"{verify_seconds:.3f}s across {verify_calls} calls{extra}"
+    )
 
 
 if __name__ == "__main__":
     main()
+

@@ -7,6 +7,7 @@ from typing import Callable, Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 import torch
+from botorch import settings
 from botorch.acquisition.multi_objective import qLogExpectedHypervolumeImprovement
 from botorch.exceptions.errors import BotorchError
 from botorch.fit import fit_gpytorch_mll
@@ -172,10 +173,11 @@ class QEHVIOptimizer:
             stopped = False
 
             for gen in range(1, self.generations + 1):
-                model = self._build_model(train_x, train_obj)
-                ref_point = self._reference_point(train_obj)
+                norm_train_obj = self._standardize_objectives(train_obj)
+                model = self._build_model(train_x, norm_train_obj)
+                ref_point = self._reference_point(norm_train_obj)
                 partitioning = NondominatedPartitioning(
-                    ref_point=ref_point, Y=train_obj
+                    ref_point=ref_point, Y=norm_train_obj
                 )
                 sampler = SobolQMCNormalSampler(sample_shape=torch.Size((128,)))
                 acqf = qLogExpectedHypervolumeImprovement(
@@ -270,25 +272,51 @@ class QEHVIOptimizer:
         sample = sample.cpu().numpy()
         return lows + sample * (highs - lows)
 
+    def _standardize_objectives(self, objectives: torch.Tensor) -> torch.Tensor:
+        """Return a column-wise standardized copy of the objective tensor."""
+        if objectives.numel() == 0:
+            return objectives.clone()
+
+        mean = objectives.mean(dim=0, keepdim=True)
+        std = objectives.std(dim=0, unbiased=False, keepdim=True)
+        std = torch.where(std > 1e-8, std, torch.ones_like(std))
+        return (objectives - mean) / std
+
     def _build_model(
         self, train_x: torch.Tensor, train_obj: torch.Tensor
     ) -> ModelListGP:
         models = []
+
+        def _make_single_task_gp(
+            train_inputs: torch.Tensor, train_features: torch.Tensor
+        ) -> SingleTaskGP:
+            """Instantiate a GP without triggering scaling warnings.
+
+            We standardise the objectives ourselves before calling this helper, so
+            BoTorch's default input validation would emit InputDataWarning despite
+            the data already being normalised.  Temporarily disabling the
+            validation suppresses the warning without changing the underlying
+            behaviour of the model fit.
+            """
+
+            with settings.validate_input_scaling(False):
+                return SingleTaskGP(
+                    train_X=train_features,
+                    train_Y=train_inputs,
+                    outcome_transform=Standardize(1),
+                )
+
         for obj_idx in range(self.num_objectives):
-            gp = SingleTaskGP(
-                train_X=train_x,
-                train_Y=train_obj[:, obj_idx : obj_idx + 1],
-                outcome_transform=Standardize(1),
+            gp = _make_single_task_gp(
+                train_obj[:, obj_idx : obj_idx + 1], train_x
             )
             mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
             try:
                 fit_gpytorch_mll(mll)
             except RuntimeError:
                 jitter = 1e-6 * torch.randn_like(train_x)
-                gp = SingleTaskGP(
-                    train_X=train_x + jitter,
-                    train_Y=train_obj[:, obj_idx : obj_idx + 1],
-                    outcome_transform=Standardize(1),
+                gp = _make_single_task_gp(
+                    train_obj[:, obj_idx : obj_idx + 1], train_x + jitter
                 )
                 mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
                 fit_gpytorch_mll(mll)
