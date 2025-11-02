@@ -193,6 +193,7 @@ class QEHVIOptimizer:
 
             history: List[List[List[float]]] = []
             stopped = False
+            feasible_rates: List[float] = []
 
             model = self._build_model(train_x, train_obj)
             sampler = SobolQMCNormalSampler(
@@ -260,6 +261,15 @@ class QEHVIOptimizer:
                 filtered_x = new_x_norm[valid_mask]
                 filtered_obj = -evaluated_tensor[valid_mask]
 
+                total_candidates = int(evaluated_tensor.shape[0])
+                feasible_count = int(valid_mask.sum().item()) if total_candidates else 0
+                feasible_rate = (
+                    feasible_count / total_candidates
+                    if total_candidates
+                    else float("nan")
+                )
+                feasible_rates.append(feasible_rate)
+
                 if filtered_x.numel():
                     train_x = torch.cat([train_x, filtered_x], dim=0)
                     train_obj = torch.cat([train_obj, filtered_obj], dim=0)
@@ -290,7 +300,13 @@ class QEHVIOptimizer:
             evaluations = len(records)
 
             if log_history:
-                return individuals, history, evaluations, stopped
+                return (
+                    individuals,
+                    history,
+                    evaluations,
+                    stopped,
+                    feasible_rates,
+                )
             return individuals
         finally:
             if pool is not None:

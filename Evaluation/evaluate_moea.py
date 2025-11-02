@@ -109,13 +109,18 @@ def run_qehvi(bounds, evaluate, generations, pop_size, seed, *, workers=None, pl
         seed=seed,
         workers=workers,
     )
-    pop, history, evaluations, stopped = alg.run(
+    result = alg.run(
         log_history=True, plateau_detector=plateau
     )
+    if len(result) == 4:
+        pop, history, evaluations, stopped = result
+        feasibility_history = None
+    else:
+        pop, history, evaluations, stopped, feasibility_history = result
     objs = [ind.objectives for ind in pop]
     final_front = nondominated(objs)
     history_fronts = [np.asarray(front, dtype=float) for front in history]
-    return final_front, history_fronts, evaluations, stopped
+    return final_front, history_fronts, evaluations, stopped, feasibility_history
 
 
 def run_moead(bounds, evaluate, generations, pop_size, seed, *, workers=None, plateau=None):
@@ -417,7 +422,7 @@ def evaluate_algorithm(
         if num_objectives == 2:
             plateau = PlateauDetector(epsilon=PLATEAU_EPSILON, window=PLATEAU_WINDOW)
         if has_gens:
-            front, history, evaluations, stopped = runner(
+            result = runner(
                 bounds,
                 evaluator,
                 gens,
@@ -427,7 +432,7 @@ def evaluate_algorithm(
                 plateau=plateau,
             )
         else:
-            front, history, evaluations, stopped = runner(
+            result = runner(
                 bounds,
                 evaluator,
                 budget,
@@ -435,6 +440,15 @@ def evaluate_algorithm(
                 gens,
                 pop,
                 plateau=plateau,
+            )
+        if len(result) == 4:
+            front, history, evaluations, stopped = result
+            feasibility_history = None
+        elif len(result) == 5:
+            front, history, evaluations, stopped, feasibility_history = result
+        else:
+            raise ValueError(
+                "Unexpected runner result length; expected 4 or 5 values"
             )
         runtime = time.perf_counter() - start
         timing_after = evaluator.timing_snapshot()
@@ -487,6 +501,9 @@ def evaluate_algorithm(
                 "infeasible_calls": cache_stats.get("infeasible_calls"),
                 "total_calls": cache_stats.get("total_calls"),
                 "feasibility_rate": cache_stats.get("feasibility_rate"),
+                "feasibility_history": (
+                    list(feasibility_history) if feasibility_history else None
+                ),
             }
         )
 
@@ -534,13 +551,13 @@ def evaluate_algorithm(
 
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
-    # algorithms = 'sms-emoa', 'nsga2', 'random_search', 'qehvi', 'moead'
-    algorithms = 'nsga2', 'qehvi'
+    algorithms = 'random_search', 'nsga2', 'qehvi'
+    # algorithms = 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead'
 
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 10
+    runs = 2
     generations = 80
     pop = 60
     worker_threads = os.cpu_count() or 1
@@ -592,18 +609,20 @@ def main():
     ref_point = np.max(ref_set, axis=0) * 1.1
     mins, ranges = _min_max_params(ref_set)
     norm_ref_set = _normalise(ref_set, mins, ranges)
+    norm_ref_point = _normalise(ref_point[np.newaxis, :], mins, ranges)[0]
 
     rng = np.random.default_rng(42)
     summary_rows = []
     convergence_records = []
+    feasibility_records = []
     metric_tables: Dict[str, pd.DataFrame] = {}
 
     for alg, data in results.items():
         rows = []
         for rec in data["runs"]:
             front = rec["front"]
-            hv_value = hypervolume_2d(front, tuple(ref_point))
             norm_front = _normalise(front, mins, ranges)
+            hv_value = hypervolume_2d(norm_front, tuple(norm_ref_point))
             igd_value = igd_plus(norm_front, norm_ref_set)
             rows.append(
                 {
@@ -626,8 +645,10 @@ def main():
                 }
             )
 
+            feas_history = rec.get("feasibility_history") or []
             for gen_idx, gen_front in enumerate(rec["history"], start=1):
-                hv_gen = hypervolume_2d(gen_front, tuple(ref_point))
+                norm_gen_front = _normalise(gen_front, mins, ranges)
+                hv_gen = hypervolume_2d(norm_gen_front, tuple(norm_ref_point))
                 convergence_records.append(
                     {
                         "Algorithm": alg,
@@ -636,6 +657,15 @@ def main():
                         "HV": hv_gen,
                     }
                 )
+                if gen_idx - 1 < len(feas_history):
+                    feasibility_records.append(
+                        {
+                            "Algorithm": alg,
+                            "run": rec["run"],
+                            "Generation": gen_idx,
+                            "FeasibleRate": float(feas_history[gen_idx - 1]),
+                        }
+                    )
 
         df = pd.DataFrame(rows)
         if df.empty:
@@ -750,7 +780,21 @@ def main():
         conv_summary.to_csv(Path("hv_convergence.csv"), index=False)
         print("Saved HV convergence curves → hv_convergence.csv")
 
-    test_rows = []
+        feasibility_df = pd.DataFrame(feasibility_records)
+        if not feasibility_df.empty:
+            feas_summary = feasibility_df.groupby(["Algorithm", "Generation"])['FeasibleRate']
+            feas_summary = feas_summary.agg(
+                median="median",
+                q1=lambda s: s.quantile(0.25),
+                q3=lambda s: s.quantile(0.75),
+            ).reset_index()
+            feas_summary.to_csv(Path("feasibility_convergence.csv"), index=False)
+            print(
+                "Saved feasibility convergence curves → "
+                "feasibility_convergence.csv"
+            )
+
+        test_rows = []
     for left, right in itertools.combinations(metric_tables.keys(), 2):
         merged = metric_tables[left].join(
             metric_tables[right],
