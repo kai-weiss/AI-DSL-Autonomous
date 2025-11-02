@@ -105,7 +105,7 @@ def run_qehvi(bounds, evaluate, generations, pop_size, seed, *, workers=None, pl
         evaluate,
         generations=generations,
         pop_size=pop_size,
-        batch_size=min(pop_size, 4),
+        batch_size=min(pop_size, 1),
         seed=seed,
         workers=workers,
     )
@@ -540,7 +540,7 @@ def main():
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 2
+    runs = 10
     generations = 80
     pop = 60
     worker_threads = os.cpu_count() or 1

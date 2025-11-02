@@ -18,7 +18,7 @@ from botorch.sampling.normal import SobolQMCNormalSampler
 from botorch.utils.multi_objective.box_decompositions.non_dominated import NondominatedPartitioning
 from botorch.utils.multi_objective.pareto import is_non_dominated
 from botorch.utils.transforms import normalize, unnormalize
-from gpytorch.mlls import ExactMarginalLogLikelihood, SumMarginalLogLikelihood
+from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from .common import Individual, PlateauDetector
 
@@ -147,11 +147,16 @@ class QEHVIOptimizer:
 
         try:
             # Initial design via random sampling.
-            for _ in range(self.initial_points):
+            while len(train_x_list) < self.initial_points:
                 raw = self._sample_uniform(rng)
                 values = {name: float(val) for name, val in zip(self.names, raw)}
                 objs = _eval_point(values)
                 records.append(_EvaluationRecord(values=values, objectives=objs))
+                objs_tensor = torch.tensor(
+                    objs, dtype=self._dtype, device=self._device
+                )
+                if (objs_tensor >= 1e8).any():
+                    continue
                 train_x_list.append(
                     normalize(
                         torch.tensor(raw, dtype=self._dtype, device=self._device)
@@ -161,9 +166,7 @@ class QEHVIOptimizer:
                     )
                 )
                 train_obj_list.append(
-                    -torch.tensor(objs, dtype=self._dtype, device=self._device)
-                    .unsqueeze(0)
-                    .contiguous()
+                    -objs_tensor.unsqueeze(0).contiguous()
                 )
 
             train_x = torch.cat(train_x_list, dim=0)
@@ -323,8 +326,6 @@ class QEHVIOptimizer:
             models.append(gp)
 
         model = ModelListGP(*models)
-        mll = SumMarginalLogLikelihood(model.likelihood, model)
-        fit_gpytorch_mll(mll)
         return model
 
     def _reference_point(self, train_obj: torch.Tensor) -> torch.Tensor:

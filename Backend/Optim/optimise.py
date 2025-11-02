@@ -21,7 +21,6 @@ from Backend.Optim.Algo.MOEAD import MOEAD
 from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.model_ops import variable_bounds, apply_values, _enumerate_chains
 
-VERIFYTA_EXPLORATION_PROB = 0.1
 
 
 def load_model(path: str) -> Model:
@@ -429,14 +428,11 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
         nonlocal regressors, obj_mins, obj_maxs
         start_eval = time.perf_counter()
         features = _normalise(values)
-        force_verify = bool(constraints) and (
-                random.random() < VERIFYTA_EXPLORATION_PROB
-        )
 
         try:
             if (
-                    not force_verify
-                    and pareto_front
+
+                    pareto_front
                     and regressors
                     and all(r.ready for r in regressors)
             ):
@@ -449,7 +445,6 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
             if (
                     constraints
                     and feasibility_filter.ready
-                    and not force_verify
             ):
                 proba = feasibility_filter.predict_proba(features)
                 if proba is not None and proba < 0.25:
@@ -460,6 +455,7 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
             }
             candidate = apply_values(base_model, assignments)
 
+            # Verify constraints via Uppaal
             feasible = True
             if constraints:
                 verify_start = time.perf_counter()
