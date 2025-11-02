@@ -334,8 +334,17 @@ class _RidgeRegressor:
             self._fit()
 
     def _fit(self) -> None:
+        if not self._X or not self._y:
+            return
+
+        if len(self._X) != len(self._y):
+            # Trim to the smallest consistent window if incremental updates raced.
+            size = min(len(self._X), len(self._y))
+            self._X = self._X[-size:]
+            self._y = self._y[-size:]
+
         X = np.vstack(self._X)
-        y = np.array(self._y)
+        y = np.array(self._y, dtype=float)
         XtX = X.T @ X
         XtX += self.ridge * np.eye(XtX.shape[0])
         Xty = X.T @ y

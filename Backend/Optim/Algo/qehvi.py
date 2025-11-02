@@ -52,20 +52,23 @@ class QEHVIOptimizer:
     """Bayesian optimisation with qEHVI for bi-objective problems."""
 
     def __init__(
-        self,
-        variables: Dict[str, Tuple[float, float]],
-        evaluate: Callable[[Dict[str, float]], List[float]],
-        *,
-        generations: int = 30,
-        pop_size: int = 4,
-        batch_size: int | None = None,
-        initial_points: int | None = None,
-        seed: int | None = None,
-        workers: int | None = None,
-        ref_point_slack: float = 1.0,
-        raw_samples: int = 256,
-        num_restarts: int = 10,
-        batch_limit: int = 5,
+            self,
+            variables: Dict[str, Tuple[float, float]],
+            evaluate: Callable[[Dict[str, float]], List[float]],
+            *,
+            generations: int = 30,
+            pop_size: int = 4,
+            batch_size: int | None = None,
+            initial_points: int | None = None,
+            seed: int | None = None,
+            workers: int | None = None,
+            ref_point_slack: float = 1.0,
+            raw_samples: int = 128,
+            num_restarts: int = 5,
+            batch_limit: int = 5,
+            qmc_samples: int = 64,
+            max_acqf_iterations: int = 100,
+            refit_interval: int = 5,
     ) -> None:
         if not variables:
             raise ValueError("No optimisation variables provided")
@@ -87,6 +90,22 @@ class QEHVIOptimizer:
         self.raw_samples = int(raw_samples)
         self.num_restarts = int(num_restarts)
         self.batch_limit = int(batch_limit)
+        self.qmc_samples = int(qmc_samples)
+        self.max_acqf_iterations = int(max_acqf_iterations)
+        self.refit_interval = int(refit_interval)
+
+        if self.raw_samples <= 0:
+            raise ValueError("raw_samples must be positive")
+        if self.num_restarts <= 0:
+            raise ValueError("num_restarts must be positive")
+        if self.batch_limit <= 0:
+            raise ValueError("batch_limit must be positive")
+        if self.qmc_samples <= 0:
+            raise ValueError("qmc_samples must be positive")
+        if self.max_acqf_iterations <= 0:
+            raise ValueError("max_acqf_iterations must be positive")
+        if self.refit_interval <= 0:
+            raise ValueError("refit_interval must be positive")
 
         self.names = list(self.variables.keys())
         self.bounds = np.asarray(list(self.variables.values()), dtype=float)
@@ -112,16 +131,16 @@ class QEHVIOptimizer:
 
     # ------------------------------------------------------------------
     def run(
-        self,
-        *,
-        log_history: bool = False,
-        plateau_detector: PlateauDetector | None = None,
+            self,
+            *,
+            log_history: bool = False,
+            plateau_detector: PlateauDetector | None = None,
     ) -> (
-        List[Individual]
-        | Tuple[List[Individual], List[List[List[float]]], int, bool]
+            List[Individual]
+            | Tuple[List[Individual], List[List[List[float]]], int, bool]
     ):
         rng = torch.Generator(device=self._device)
-        seed = self.seed if self.seed is not None else random.randrange(10**9)
+        seed = self.seed if self.seed is not None else random.randrange(10 ** 9)
         rng.manual_seed(seed)
         random.seed(seed)
         np.random.seed(seed)
@@ -175,14 +194,17 @@ class QEHVIOptimizer:
             history: List[List[List[float]]] = []
             stopped = False
 
+            model = self._build_model(train_x, train_obj)
+            sampler = SobolQMCNormalSampler(
+                sample_shape=torch.Size((self.qmc_samples,))
+            )
+            since_refit = 0
+
             for gen in range(1, self.generations + 1):
-                norm_train_obj = self._standardize_objectives(train_obj)
-                model = self._build_model(train_x, norm_train_obj)
-                ref_point = self._reference_point(norm_train_obj)
+                ref_point = self._reference_point(train_obj)
                 partitioning = NondominatedPartitioning(
-                    ref_point=ref_point, Y=norm_train_obj
+                    ref_point=ref_point, Y=train_obj
                 )
-                sampler = SobolQMCNormalSampler(sample_shape=torch.Size((128,)))
                 acqf = qLogExpectedHypervolumeImprovement(
                     model=model,
                     ref_point=ref_point.tolist(),
@@ -197,7 +219,10 @@ class QEHVIOptimizer:
                         q=self.batch_size,
                         num_restarts=self.num_restarts,
                         raw_samples=self.raw_samples,
-                        options={"batch_limit": self.batch_limit, "maxiter": 200},
+                        options={
+                            "batch_limit": self.batch_limit,
+                            "maxiter": self.max_acqf_iterations,
+                        },
                         sequential=False,
                     )
                     candidates = candidates.detach()
@@ -238,6 +263,13 @@ class QEHVIOptimizer:
                 if filtered_x.numel():
                     train_x = torch.cat([train_x, filtered_x], dim=0)
                     train_obj = torch.cat([train_obj, filtered_obj], dim=0)
+
+                    since_refit += int(filtered_x.shape[0])
+                    if since_refit >= self.refit_interval:
+                        model = self._build_model(train_x, train_obj)
+                        since_refit = 0
+                    else:
+                        model = self._condition_model(model, filtered_x, filtered_obj)
 
                 for values, objs in zip(value_dicts, evaluated):
                     records.append(
@@ -286,18 +318,18 @@ class QEHVIOptimizer:
         return (objectives - mean) / std
 
     def _build_model(
-        self, train_x: torch.Tensor, train_obj: torch.Tensor
+            self, train_x: torch.Tensor, train_obj: torch.Tensor
     ) -> ModelListGP:
         models = []
 
         def _make_single_task_gp(
-            train_inputs: torch.Tensor, train_features: torch.Tensor
+                train_inputs: torch.Tensor, train_features: torch.Tensor
         ) -> SingleTaskGP:
             """Instantiate a GP without triggering scaling warnings.
 
-            We standardise the objectives ourselves before calling this helper, so
-            BoTorch's default input validation would emit InputDataWarning despite
-            the data already being normalised.  Temporarily disabling the
+            The design variables are already normalised to the unit cube, so
+            BoTorch's default input validation would emit InputDataWarning even
+            though the data matches the expected scale. Temporarily disabling the
             validation suppresses the warning without changing the underlying
             behaviour of the model fit.
             """
@@ -311,7 +343,7 @@ class QEHVIOptimizer:
 
         for obj_idx in range(self.num_objectives):
             gp = _make_single_task_gp(
-                train_obj[:, obj_idx : obj_idx + 1], train_x
+                train_obj[:, obj_idx: obj_idx + 1], train_x
             )
             mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
             try:
@@ -319,7 +351,7 @@ class QEHVIOptimizer:
             except RuntimeError:
                 jitter = 1e-6 * torch.randn_like(train_x)
                 gp = _make_single_task_gp(
-                    train_obj[:, obj_idx : obj_idx + 1], train_x + jitter
+                    train_obj[:, obj_idx: obj_idx + 1], train_x + jitter
                 )
                 mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
                 fit_gpytorch_mll(mll)
@@ -332,6 +364,19 @@ class QEHVIOptimizer:
         worst = train_obj.min(dim=0).values
         slack = torch.full_like(worst, self.ref_point_slack)
         return worst - slack
+
+    def _condition_model(
+            self,
+            model: ModelListGP,
+            new_x: torch.Tensor,
+            new_obj: torch.Tensor,
+    ) -> ModelListGP:
+        conditioned = []
+        for idx, gp in enumerate(model.models):
+            conditioned.append(
+                gp.condition_on_observations(new_x, new_obj[:, idx: idx + 1])
+            )
+        return ModelListGP(*conditioned)
 
     def _build_population(self, records: Iterable[_EvaluationRecord]) -> List[Individual]:
         objs_tensor = torch.tensor(
