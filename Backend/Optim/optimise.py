@@ -381,6 +381,38 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
         "verifyta_calls": 0,
     }
 
+    state_lock = Lock()
+    state = {
+        "total_evaluations": 0,
+        "last_verified_eval": 0,
+    }
+
+    min_early_verifications = max(10, len(var_names) * 4)
+    min_verify_ratio = 0.1
+    max_skip_without_verify = 25
+
+    def _register_evaluation() -> int:
+        with state_lock:
+            state["total_evaluations"] += 1
+            return state["total_evaluations"]
+
+    def _should_force_verify(eval_index: int) -> bool:
+        with timing_lock:
+            verify_calls = timings["verifyta_calls"]
+        with state_lock:
+            last_verified = state["last_verified_eval"]
+            total_so_far = state["total_evaluations"]
+
+        if verify_calls < min_early_verifications:
+            return True
+
+        if eval_index - last_verified >= max_skip_without_verify:
+            return True
+
+        completed = max(total_so_far, 1)
+        ratio = verify_calls / completed
+        return ratio < min_verify_ratio
+
     feasibility_filter = _OnlineGaussianNB(len(var_names))
     regressors: list[_RidgeRegressor] = []
     pareto_front: list[list[float]] = []
@@ -426,6 +458,7 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
 
     def evaluate(values: Dict[str, float]) -> List[float]:
         nonlocal regressors, obj_mins, obj_maxs
+        eval_index = _register_evaluation()
         start_eval = time.perf_counter()
         features = _normalise(values)
 
@@ -440,7 +473,8 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
                 if all(p is not None for p in predicted) and _predicted_dominated(
                         [float(p) for p in predicted]
                 ):
-                    return [1e9, 1e9]
+                    if not _should_force_verify(eval_index):
+                        return [1e9, 1e9]
 
             if (
                     constraints
@@ -448,7 +482,8 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
             ):
                 proba = feasibility_filter.predict_proba(features)
                 if proba is not None and proba < 0.25:
-                    return [1e9, 1e9]
+                    if not _should_force_verify(eval_index):
+                        return [1e9, 1e9]
 
             assignments = {
                 name: timedelta(milliseconds=v) for name, v in values.items()
@@ -464,6 +499,8 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
                 with timing_lock:
                     timings["verifyta_total"] += verify_elapsed
                     timings["verifyta_calls"] += 1
+                with state_lock:
+                    state["last_verified_eval"] = eval_index
                 feasible = not any(r is False or r is None for r in res.values())
                 feasibility_filter.partial_fit(features, feasible)
                 if not feasible:
