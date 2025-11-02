@@ -174,10 +174,15 @@ class MemoisedEvaluator:
     def __init__(self, evaluate, names: Iterable[str]):
         self._evaluate = evaluate
         self._names = tuple(names)
-        self._cache: Dict[Tuple[float, ...], Tuple[float, ...]] = {}
+        self._cache: Dict[
+            Tuple[float, ...], Tuple[Tuple[float, ...], bool]
+        ] = {}
         self._lock = Lock()
         self._hits = 0
         self._misses = 0
+        self._total_calls = 0
+        self._feasible_calls = 0
+        self._infeasible_calls = 0
 
     def __call__(self, values: Dict[str, float]):
         key = tuple(float(values[name]) for name in self._names)
@@ -185,20 +190,42 @@ class MemoisedEvaluator:
             cached = self._cache.get(key)
             if cached is not None:
                 self._hits += 1
-                return cached
+                self._total_calls += 1
+                feasible = cached[1]
+                if feasible:
+                    self._feasible_calls += 1
+                else:
+                    self._infeasible_calls += 1
+                return cached[0]
 
         result = tuple(float(v) for v in self._evaluate(dict(values)))
+        feasible = self._is_feasible(result)
 
         with self._lock:
             # Another thread might have populated the cache while we were evaluating.
             cached = self._cache.get(key)
             if cached is not None:
                 self._hits += 1
-                return cached
+                self._total_calls += 1
+                feasible = cached[1]
+                if feasible:
+                    self._feasible_calls += 1
+                else:
+                    self._infeasible_calls += 1
+                return cached[0]
 
-            self._cache[key] = result
+            self._cache[key] = (result, feasible)
             self._misses += 1
+            self._total_calls += 1
+            if feasible:
+                self._feasible_calls += 1
+            else:
+                self._infeasible_calls += 1
             return result
+
+    @staticmethod
+    def _is_feasible(values: Tuple[float, ...]) -> bool:
+        return all(math.isfinite(v) and v < 1e9 for v in values)
 
     def stats(self) -> Dict[str, float]:
         with self._lock:
@@ -206,7 +233,15 @@ class MemoisedEvaluator:
                 "hits": self._hits,
                 "misses": self._misses,
                 "entries": len(self._cache),
+                "total_calls": self._total_calls,
+                "feasible_calls": self._feasible_calls,
+                "infeasible_calls": self._infeasible_calls,
             }
+
+            if self._total_calls:
+                data["feasibility_rate"] = (
+                    self._feasible_calls / self._total_calls
+                )
 
         timing_data = self.timing_snapshot()
         if timing_data is not None:
@@ -354,6 +389,9 @@ def evaluate_algorithm(
         "hits": 0,
         "misses": 0,
         "entries": 0,
+        "total_calls": 0,
+        "feasible_calls": 0,
+        "infeasible_calls": 0,
         "evaluate_seconds": 0.0,
         "evaluate_calls": 0.0,
         "verifyta_seconds": 0.0,
@@ -430,6 +468,7 @@ def evaluate_algorithm(
             eval_calls = int(round(eval_calls))
             verify_calls = int(round(verify_calls))
 
+        cache_stats = evaluator.stats()
         run_records.append(
             {
                 "run": r,
@@ -444,13 +483,23 @@ def evaluate_algorithm(
                 "verifyta_seconds": verify_seconds,
                 "verifyta_calls": verify_calls,
                 "verifyta_percentage": verify_pct,
+                "feasible_calls": cache_stats.get("feasible_calls"),
+                "infeasible_calls": cache_stats.get("infeasible_calls"),
+                "total_calls": cache_stats.get("total_calls"),
+                "feasibility_rate": cache_stats.get("feasibility_rate"),
             }
         )
 
-        cache_stats = evaluator.stats()
         cache_totals["hits"] += int(cache_stats.get("hits", 0) or 0)
         cache_totals["misses"] += int(cache_stats.get("misses", 0) or 0)
         cache_totals["entries"] += int(cache_stats.get("entries", 0) or 0)
+        cache_totals["total_calls"] += int(cache_stats.get("total_calls", 0) or 0)
+        cache_totals["feasible_calls"] += int(
+            cache_stats.get("feasible_calls", 0) or 0
+        )
+        cache_totals["infeasible_calls"] += int(
+            cache_stats.get("infeasible_calls", 0) or 0
+        )
 
         eval_seconds_total = cache_stats.get("evaluate_seconds")
         if isinstance(eval_seconds_total, (int, float)) and not math.isnan(
@@ -486,12 +535,12 @@ def evaluate_algorithm(
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
     # algorithms = 'sms-emoa', 'nsga2', 'random_search', 'qehvi', 'moead'
-    algorithms = 'nsga2', 'sms-emoa', 'qehvi'
+    algorithms = 'nsga2', 'qehvi'
 
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 10
+    runs = 2
     generations = 80
     pop = 60
     worker_threads = os.cpu_count() or 1
@@ -511,6 +560,9 @@ def main():
         "hits": 0,
         "misses": 0,
         "entries": 0,
+        "total_calls": 0,
+        "feasible_calls": 0,
+        "infeasible_calls": 0,
         "evaluate_seconds": 0.0,
         "evaluate_calls": 0.0,
         "verifyta_seconds": 0.0,
@@ -567,6 +619,10 @@ def main():
                     "verifyta_time_s": rec.get("verifyta_seconds"),
                     "verifyta_calls": rec.get("verifyta_calls"),
                     "verifyta_pct": rec.get("verifyta_percentage"),
+                    "feasible_calls": rec.get("feasible_calls"),
+                    "infeasible_calls": rec.get("infeasible_calls"),
+                    "total_calls": rec.get("total_calls"),
+                    "feasibility_rate": rec.get("feasibility_rate"),
                 }
             )
 
@@ -620,6 +676,9 @@ def main():
                 "Verifyta time (median s)": verify_time_med,
                 "Verifyta calls/run": verify_calls_display,
                 "Verifyta share (median %)": verify_pct_med,
+                "Feasible calls/run": df["feasible_calls"].median(),
+                "Infeasible calls/run": df["infeasible_calls"].median(),
+                "Feasibility rate (median)": df["feasibility_rate"].median(),
             }
         )
         print(f"Saved per-run metrics for {alg} → results_{alg}.csv")
@@ -664,6 +723,21 @@ def main():
             print(
                 f"  {alg}: {total_calls:.0f} calls taking {total_time:.3f}s ({share_text})"
             )
+
+    print("\nFeasibility rates per algorithm:")
+    for alg, table in metric_tables.items():
+        if "feasibility_rate" not in table.columns:
+            print(f"  {alg}: feasibility metrics unavailable")
+            continue
+        rates = table["feasibility_rate"].dropna()
+        if rates.empty:
+            print(f"  {alg}: feasibility metrics unavailable")
+            continue
+        median_rate = float(rates.median())
+        mean_rate = float(rates.mean())
+        print(
+            f"  {alg}: median {median_rate * 100:.2f}% (mean {mean_rate * 100:.2f}%)"
+        )
 
     convergence_df = pd.DataFrame(convergence_records)
     if not convergence_df.empty:
@@ -732,6 +806,18 @@ def main():
     print(
         "  verifyta subprocess time: "
         f"{verify_seconds:.3f}s across {verify_calls} calls{extra}"
+    )
+
+    total_calls = int(round(overall_cache_totals["total_calls"]))
+    feasible_calls = int(round(overall_cache_totals["feasible_calls"]))
+    infeasible_calls = int(round(overall_cache_totals["infeasible_calls"]))
+    feasibility_rate = (
+        (feasible_calls / total_calls) * 100.0 if total_calls > 0 else float("nan")
+    )
+    print(
+        "  Feasibility overall: "
+        f"{feasible_calls} feasible / {infeasible_calls} infeasible "
+        f"({total_calls} total, {feasibility_rate:.2f}% feasible)"
     )
 
 
