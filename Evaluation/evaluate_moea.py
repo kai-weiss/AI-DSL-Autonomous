@@ -47,6 +47,36 @@ def hypervolume_2d(front: np.ndarray, ref: Tuple[float, float]) -> float:
     return hv
 
 
+def _bounding_box_volume(ref_point: np.ndarray, mins: np.ndarray) -> float:
+    extents = np.maximum(ref_point - mins, 0.0)
+    extents = np.maximum(extents, 1e-12)
+    return float(np.prod(extents))
+
+
+def _hypervolume_with_fallback(
+        front: np.ndarray,
+        base_ref: np.ndarray,
+        fallback_ref: np.ndarray,
+        base_mins: np.ndarray,
+        fallback_mins: np.ndarray,
+) -> float:
+    hv_value = hypervolume_2d(front, tuple(base_ref))
+    if hv_value > 0.0 or not np.any(front > base_ref):
+        return hv_value
+
+    hv_fallback = hypervolume_2d(front, tuple(fallback_ref))
+    if hv_fallback <= 0.0:
+        return hv_value
+
+    base_volume = _bounding_box_volume(base_ref, base_mins)
+    fallback_volume = _bounding_box_volume(fallback_ref, fallback_mins)
+    if fallback_volume == 0.0 or not math.isfinite(fallback_volume):
+        return hv_value
+
+    scale = base_volume / fallback_volume
+    return hv_fallback * scale
+
+
 def igd_plus(front: np.ndarray, ref_set: np.ndarray) -> float:
     if len(front) == 0:
         return float("inf")
@@ -647,9 +677,27 @@ def main():
         for key in overall_cache_totals:
             overall_cache_totals[key] += totals.get(key, 0)
 
-    ref_set = nondominated(np.vstack(all_fronts))
-    ref_point = np.max(ref_set, axis=0) * 1.1
-    mins, ranges = _min_max_params(ref_set)
+    if all_fronts:
+        stacked_fronts = np.vstack(all_fronts)
+    else:
+        stacked_fronts = np.empty((0, num_objectives), dtype=float)
+
+    if stacked_fronts.size == 0:
+        ref_set = stacked_fronts
+        ref_point = np.zeros(num_objectives, dtype=float)
+        mins = np.zeros(num_objectives, dtype=float)
+        ranges = np.ones(num_objectives, dtype=float)
+        fallback_ref_point = ref_point.copy()
+        fallback_mins = mins.copy()
+    else:
+        ref_set = nondominated(stacked_fronts)
+        if ref_set.size == 0:
+            ref_set = stacked_fronts
+        ref_point = np.max(ref_set, axis=0) * 1.1
+        mins, ranges = _min_max_params(ref_set)
+        fallback_ref_point = np.max(stacked_fronts, axis=0) * 1.1
+        fallback_mins, _ = _min_max_params(stacked_fronts)
+
     norm_ref_set = _normalise(ref_set, mins, ranges)
 
     rng = np.random.default_rng(42)
@@ -662,7 +710,13 @@ def main():
         rows = []
         for rec in data["runs"]:
             front = rec["front"]
-            hv_value = hypervolume_2d(front, tuple(ref_point))
+            hv_value = _hypervolume_with_fallback(
+                front,
+                ref_point,
+                fallback_ref_point,
+                mins,
+                fallback_mins,
+            )
             norm_front = _normalise(front, mins, ranges)
             igd_value = igd_plus(norm_front, norm_ref_set)
             rows.append(
@@ -688,7 +742,13 @@ def main():
 
             feas_history = rec.get("feasibility_history") or []
             for gen_idx, gen_front in enumerate(rec["history"], start=1):
-                hv_gen = hypervolume_2d(gen_front, tuple(ref_point))
+                hv_gen = _hypervolume_with_fallback(
+                    gen_front,
+                    ref_point,
+                    fallback_ref_point,
+                    mins,
+                    fallback_mins,
+                )
                 convergence_records.append(
                     {
                         "Algorithm": alg,
