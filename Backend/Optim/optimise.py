@@ -18,6 +18,7 @@ from Backend.Optim.Algo.common import Individual
 from Backend.Optim.Algo.NSGA2 import NSGAII
 from Backend.Optim.Algo.SMSEMOA import SMSEMOA
 from Backend.Optim.Algo.MOEAD import MOEAD
+from Backend.Optim.Algo.epsilon_constraint import EpsilonConstraint
 from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.model_ops import variable_bounds, apply_values, _enumerate_chains
 
@@ -550,6 +551,7 @@ ALGORITHMS = {
     "sms-emoa": SMSEMOA,
     "qehvi": QEHVIOptimizer,
     "moead": MOEAD,
+    "eps-constraint": EpsilonConstraint,
 }
 
 
@@ -620,6 +622,6 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
 
 
 if __name__ == "__main__":
-    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="nsga2")
+    m, ind = main("C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl", generations=10, algorithm="eps-constraint")
     # print(m)
     print("Best individual:", ind.values, ind.objectives)

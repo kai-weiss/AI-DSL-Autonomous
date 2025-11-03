@@ -17,6 +17,7 @@ from Backend.Optim.optimise import load_model, variable_bounds, make_evaluator
 from Backend.Optim.Algo.NSGA2 import NSGAII
 from Backend.Optim.Algo.SMSEMOA import SMSEMOA
 from Backend.Optim.Algo.MOEAD import MOEAD
+from Backend.Optim.Algo.epsilon_constraint import EpsilonConstraint
 from Backend.Optim.Algo.qehvi import QEHVIOptimizer
 from Backend.Optim.Algo.common import PlateauDetector
 
@@ -141,6 +142,46 @@ def run_moead(bounds, evaluate, generations, pop_size, seed, *, workers=None, pl
     history_fronts = [np.asarray(front, dtype=float) for front in history]
     return final_front, history_fronts, evaluations, stopped
 
+def run_eps_constraint(
+        bounds,
+        evaluate,
+        generations,
+        pop_size,
+        seed,
+        *,
+        workers=None,
+        plateau=None,
+):
+    random.seed(seed)
+    np.random.seed(seed)
+    alg = EpsilonConstraint(
+        bounds,
+        evaluate,
+        generations=generations,
+        pop_size=pop_size,
+        seed=seed,
+    )
+    pop, history, evaluations, stopped = alg.run(
+        log_history=True, plateau_detector=plateau
+    )
+    objs = [ind.objectives for ind in pop]
+    final_front = nondominated(objs)
+    num_obj = alg.num_objectives
+    if final_front.size == 0:
+        final_front = np.empty((0, num_obj), dtype=float)
+    else:
+        final_front = final_front.reshape((-1, num_obj))
+
+    history_fronts = []
+    for front in history:
+        arr = np.asarray(front, dtype=float)
+        if arr.size == 0:
+            arr = np.empty((0, num_obj), dtype=float)
+        else:
+            arr = arr.reshape((-1, num_obj))
+        history_fronts.append(arr)
+    return final_front, history_fronts, evaluations, stopped
+
 
 def random_search(bounds, evaluate, budget, seed, generations, pop_size, *, plateau=None):
     rnd = random.Random(seed)
@@ -166,6 +207,7 @@ ALGORITHMS = {
     "sms-emoa": (run_sms_emoa, True),
     "qehvi": (run_qehvi, True),
     "moead": (run_moead, True),
+    "eps-constraint": (run_eps_constraint, True),
     "random_search": (random_search, False),
 }
 
@@ -551,8 +593,8 @@ def evaluate_algorithm(
 
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
-    algorithms = 'random_search', 'nsga2', 'qehvi'
-    # algorithms = 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead'
+    algorithms = 'random_search', 'nsga2', 'eps-constraint'
+    # algorithms = 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'
 
     # runs = 10
     # generations = 80
@@ -609,7 +651,6 @@ def main():
     ref_point = np.max(ref_set, axis=0) * 1.1
     mins, ranges = _min_max_params(ref_set)
     norm_ref_set = _normalise(ref_set, mins, ranges)
-    norm_ref_point = _normalise(ref_point[np.newaxis, :], mins, ranges)[0]
 
     rng = np.random.default_rng(42)
     summary_rows = []
@@ -621,8 +662,8 @@ def main():
         rows = []
         for rec in data["runs"]:
             front = rec["front"]
+            hv_value = hypervolume_2d(front, tuple(ref_point))
             norm_front = _normalise(front, mins, ranges)
-            hv_value = hypervolume_2d(norm_front, tuple(norm_ref_point))
             igd_value = igd_plus(norm_front, norm_ref_set)
             rows.append(
                 {
@@ -647,8 +688,7 @@ def main():
 
             feas_history = rec.get("feasibility_history") or []
             for gen_idx, gen_front in enumerate(rec["history"], start=1):
-                norm_gen_front = _normalise(gen_front, mins, ranges)
-                hv_gen = hypervolume_2d(norm_gen_front, tuple(norm_ref_point))
+                hv_gen = hypervolume_2d(gen_front, tuple(ref_point))
                 convergence_records.append(
                     {
                         "Algorithm": alg,
