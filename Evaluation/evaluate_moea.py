@@ -78,15 +78,27 @@ def _hypervolume_with_fallback(
 
 
 def igd_plus(front: np.ndarray, ref_set: np.ndarray) -> float:
+    """Compute the IGD+ indicator for minimisation problems."""
+
     if len(front) == 0:
         return float("inf")
-    dists = []
-    for r in ref_set:
-        if np.any(np.all(front <= r, axis=1)):  # dominated ref point
-            dists.append(0.0)
-        else:
-            dists.append(np.min(np.linalg.norm(front - r, axis=1)))
-    return float(np.mean(dists))
+
+    front = np.atleast_2d(np.asarray(front, dtype=float))
+    ref_set = np.atleast_2d(np.asarray(ref_set, dtype=float))
+
+    # Filter out any non-finite points that could otherwise contaminate the
+    # distance computation and blow up the IGD+ value.
+    front = front[np.all(np.isfinite(front), axis=1)]
+    ref_set = ref_set[np.all(np.isfinite(ref_set), axis=1)]
+
+    if front.size == 0 or ref_set.size == 0:
+        return float("inf")
+
+    deltas = np.maximum(front[:, None, :] - ref_set[None, :, :], 0.0)
+    distances = np.linalg.norm(deltas, axis=2)
+    min_distances = np.min(distances, axis=0)
+
+    return float(np.mean(min_distances))
 
 
 #  Algorithm runners
@@ -633,7 +645,7 @@ def main():
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 10
+    runs = 2
     generations = 80
     pop = 60
     worker_threads = os.cpu_count() or 1
@@ -696,20 +708,28 @@ def main():
     if stacked_fronts.size == 0:
         ref_set = stacked_fronts
         ref_point = np.zeros(num_objectives, dtype=float)
-        mins = np.zeros(num_objectives, dtype=float)
-        ranges = np.ones(num_objectives, dtype=float)
+        hv_mins = np.zeros(num_objectives, dtype=float)
+        igd_mins = hv_mins.copy()
+        igd_ranges = np.ones(num_objectives, dtype=float)
         fallback_ref_point = ref_point.copy()
-        fallback_mins = mins.copy()
+        fallback_mins = hv_mins.copy()
     else:
         ref_set = nondominated(stacked_fronts)
         if ref_set.size == 0:
             ref_set = stacked_fronts
         ref_point = np.max(ref_set, axis=0) * 1.1
-        mins, ranges = _min_max_params(ref_set)
+        hv_mins, _ = _min_max_params(ref_set)
         fallback_ref_point = np.max(stacked_fronts, axis=0) * 1.1
-        fallback_mins, _ = _min_max_params(stacked_fronts)
+        stacked_mins, stacked_ranges = _min_max_params(stacked_fronts)
+        fallback_mins = stacked_mins
+        igd_mins = stacked_mins
+        igd_ranges = stacked_ranges
 
-    norm_ref_set = _normalise(ref_set, mins, ranges)
+    # Normalise the reference set using the overall observed bounds across all
+    # approximation fronts. This keeps the IGD+ values comparable between
+    # algorithms and prevents extreme ranges from a single run skewing the
+    # scaling.
+    norm_ref_set = _normalise(ref_set, igd_mins, igd_ranges)
 
     rng = np.random.default_rng(42)
     summary_rows = []
@@ -725,10 +745,10 @@ def main():
                 front,
                 ref_point,
                 fallback_ref_point,
-                mins,
+                hv_mins,
                 fallback_mins,
             )
-            norm_front = _normalise(front, mins, ranges)
+            norm_front = _normalise(front, igd_mins, igd_ranges)
             igd_value = igd_plus(norm_front, norm_ref_set)
             rows.append(
                 {
@@ -757,7 +777,7 @@ def main():
                     gen_front,
                     ref_point,
                     fallback_ref_point,
-                    mins,
+                    hv_mins,
                     fallback_mins,
                 )
                 convergence_records.append(
