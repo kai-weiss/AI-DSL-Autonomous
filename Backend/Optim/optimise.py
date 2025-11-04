@@ -327,14 +327,16 @@ class _RidgeRegressor:
         self._X: list[np.ndarray] = []
         self._y: list[float] = []
         self._coef: np.ndarray | None = None
+        self._lock = Lock()
 
     def add_sample(self, x: np.ndarray, y: float) -> None:
-        self._X.append(np.append(x, 1.0))
-        self._y.append(float(y))
-        if len(self._X) >= self.min_samples:
-            self._fit()
+        with self._lock:
+            self._X.append(np.append(x, 1.0))
+            self._y.append(float(y))
+            if len(self._X) >= self.min_samples:
+                self._fit_locked()
 
-    def _fit(self) -> None:
+    def _fit_locked(self) -> None:
         if not self._X or not self._y:
             return
 
@@ -344,22 +346,41 @@ class _RidgeRegressor:
             self._X = self._X[-size:]
             self._y = self._y[-size:]
 
+        if not self._X or not self._y:
+            return
+
         X = np.vstack(self._X)
         y = np.array(self._y, dtype=float)
+
+        if X.shape[0] != y.shape[0]:
+            size = min(X.shape[0], y.shape[0])
+            if size == 0:
+                self._X.clear()
+                self._y.clear()
+                self._coef = None
+                return
+            self._X = self._X[-size:]
+            self._y = self._y[-size:]
+            X = np.vstack(self._X)
+            y = np.array(self._y, dtype=float)
+
         XtX = X.T @ X
         XtX += self.ridge * np.eye(XtX.shape[0])
         Xty = X.T @ y
         self._coef = np.linalg.solve(XtX, Xty)
 
     def predict(self, x: np.ndarray) -> float | None:
-        if self._coef is None:
+        with self._lock:
+            coef = None if self._coef is None else self._coef.copy()
+        if coef is None:
             return None
         ext = np.append(x, 1.0)
-        return float(ext @ self._coef)
+        return float(ext @ coef)
 
     @property
     def ready(self) -> bool:
-        return self._coef is not None
+        with self._lock:
+            return self._coef is not None
 
 
 def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float]]:
