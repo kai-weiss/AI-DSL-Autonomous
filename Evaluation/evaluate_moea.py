@@ -452,7 +452,7 @@ def evaluate_algorithm(
         key: str,
         bounds: Dict[str, Tuple[float, float]],
         num_objectives: int,
-        evaluator_factory: Callable[[], MemoisedEvaluator],
+        evaluator_factory: Callable[..., MemoisedEvaluator],
         runs: int,
         gens: int,
         pop: int,
@@ -460,6 +460,7 @@ def evaluate_algorithm(
         worker_threads: int | None = None,
 ):
     runner, has_gens = ALGORITHMS[key]
+    require_full_verification = key == "eps-constraint"
 
     run_records = []
     cache_totals = {
@@ -485,7 +486,10 @@ def evaluate_algorithm(
         return after.get(key, 0.0) - before.get(key, 0.0)
 
     for r in range(runs):
-        evaluator = evaluator_factory()
+        evaluator = evaluator_factory(
+            force_full_verification=require_full_verification,
+            min_verify_ratio=1.0 if require_full_verification else None,
+        )
         seed = 17 + r
         budget = gens * pop
         start = time.perf_counter()
@@ -623,13 +627,13 @@ def evaluate_algorithm(
 
 def main():
     dsl = "C:/Users/kaiwe/Documents/Master/Masterarbeit/Projekt/Data/DSLInput/Overtaking_Hard.adsl"
-    algorithms = 'random_search', 'nsga2', 'eps-constraint'
+    algorithms =  'nsga2', 'eps-constraint'
     # algorithms = 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'
 
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 2
+    runs = 10
     generations = 80
     pop = 60
     worker_threads = os.cpu_count() or 1
@@ -640,8 +644,15 @@ def main():
     var_names = tuple(bounds.keys())
     num_objectives = len(model.optimisation.objectives)
 
-    def evaluator_factory() -> MemoisedEvaluator:
-        return MemoisedEvaluator(make_evaluator(model), var_names)
+    def evaluator_factory(
+            *,
+            force_full_verification: bool = False,
+            min_verify_ratio: float | None = None,
+    ) -> MemoisedEvaluator:
+        kwargs = {"force_full_verification": force_full_verification}
+        if min_verify_ratio is not None:
+            kwargs["min_verify_ratio"] = min_verify_ratio
+        return MemoisedEvaluator(make_evaluator(model, **kwargs), var_names)
 
     results = {}
     all_fronts: List[np.ndarray] = []

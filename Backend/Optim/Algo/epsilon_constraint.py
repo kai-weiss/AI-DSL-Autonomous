@@ -138,6 +138,12 @@ class EpsilonConstraint:
         history: List[List[List[float]]] = []
         stopped_early = False
         generation_idx = 0
+        default_sigma = np.maximum(
+            (self.bounds[:, 1] - self.bounds[:, 0]) / 3.0, 1e-3
+        )
+        followup_sigma = np.maximum(default_sigma / 2.0, 1e-3)
+        warm_mean: np.ndarray | None = None
+        warm_sigma: np.ndarray | None = None
 
         for objectives in warmup:
             if all(
@@ -165,11 +171,16 @@ class EpsilonConstraint:
                 log_history,
                 plateau_detector,
                 generation_idx,
+                mean=warm_mean,
+                sigma=warm_sigma,
             )
             generation_idx += completed
 
             if best is not None:
-                vec, objs = best
+                best_vec, objs = best
+                warm_mean = best_vec.copy()
+                warm_sigma = followup_sigma.copy()
+                vec = best_vec.copy()
                 vec, objs = self._discrete_lns(vec, objs, epsilons)
                 if self._is_feasible(objs, epsilons):
                     self._solutions.append(
@@ -195,9 +206,28 @@ class EpsilonConstraint:
             log_history: bool,
             plateau_detector: PlateauDetector | None,
             generation_start: int,
+            *,
+            mean: np.ndarray | None = None,
+            sigma: np.ndarray | None = None,
     ) -> tuple[tuple[np.ndarray, List[float]] | None, int, bool]:
-        mean = np.array([(lo + hi) / 2.0 for lo, hi in self.bounds], dtype=float)
-        sigma = np.maximum((self.bounds[:, 1] - self.bounds[:, 0]) / 3.0, 1e-3)
+        default_mean = np.array(
+            [(lo + hi) / 2.0 for lo, hi in self.bounds], dtype=float
+        )
+        if mean is None:
+            mean = default_mean
+        else:
+            mean = np.array(mean, dtype=float)
+            mean = np.clip(mean, self.bounds[:, 0], self.bounds[:, 1])
+
+        default_sigma = np.maximum(
+            (self.bounds[:, 1] - self.bounds[:, 0]) / 3.0, 1e-3
+        )
+        if sigma is None:
+            sigma = default_sigma
+        else:
+            sigma = np.array(sigma, dtype=float)
+            sigma = np.clip(sigma, 1e-3, None)
+
         mu = max(1, self.pop_size // 2)
         best_feasible: tuple[np.ndarray, List[float]] | None = None
         success_window: deque[int] = deque(maxlen=8)

@@ -383,7 +383,12 @@ class _RidgeRegressor:
             return self._coef is not None
 
 
-def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float]]:
+def make_evaluator(
+        base_model: Model,
+        *,
+        min_verify_ratio: float = 0.1,
+        force_full_verification: bool = False,
+) -> Callable[[Dict[str, float]], List[float]]:
     verifier = UppaalVerifier()
     constraints = getattr(base_model.optimisation, "constraints", [])
 
@@ -419,7 +424,7 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
     }
 
     min_early_verifications = max(10, len(var_names) * 4)
-    min_verify_ratio = 0.1
+    verify_ratio_threshold = max(min_verify_ratio, 0.0)
     max_skip_without_verify = 25
 
     def _register_evaluation() -> int:
@@ -428,6 +433,8 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
             return state["total_evaluations"]
 
     def _should_force_verify(eval_index: int) -> bool:
+        if force_full_verification:
+            return True
         with timing_lock:
             verify_calls = timings["verifyta_calls"]
         with state_lock:
@@ -442,7 +449,9 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
 
         completed = max(total_so_far, 1)
         ratio = verify_calls / completed
-        return ratio < min_verify_ratio
+        if verify_ratio_threshold <= 0.0:
+            return False
+        return ratio < verify_ratio_threshold
 
     feasibility_filter = _OnlineGaussianNB(len(var_names))
     regressors: list[_RidgeRegressor] = []
@@ -494,27 +503,28 @@ def make_evaluator(base_model: Model) -> Callable[[Dict[str, float]], List[float
         features = _normalise(values)
 
         try:
-            if (
+            if not force_full_verification:
+                if (
 
-                    pareto_front
-                    and regressors
-                    and all(r.ready for r in regressors)
-            ):
-                predicted = [r.predict(features) for r in regressors]
-                if all(p is not None for p in predicted) and _predicted_dominated(
-                        [float(p) for p in predicted]
+                        pareto_front
+                        and regressors
+                        and all(r.ready for r in regressors)
                 ):
-                    if not _should_force_verify(eval_index):
-                        return [1e9, 1e9]
+                    predicted = [r.predict(features) for r in regressors]
+                    if all(p is not None for p in predicted) and _predicted_dominated(
+                            [float(p) for p in predicted]
+                    ):
+                        if not _should_force_verify(eval_index):
+                            return [1e9, 1e9]
 
-            if (
-                    constraints
-                    and feasibility_filter.ready
-            ):
-                proba = feasibility_filter.predict_proba(features)
-                if proba is not None and proba < 0.25:
-                    if not _should_force_verify(eval_index):
-                        return [1e9, 1e9]
+                if (
+                        constraints
+                        and feasibility_filter.ready
+                ):
+                    proba = feasibility_filter.predict_proba(features)
+                    if proba is not None and proba < 0.25:
+                        if not _should_force_verify(eval_index):
+                            return [1e9, 1e9]
 
             assignments = {
                 name: timedelta(milliseconds=v) for name, v in values.items()
