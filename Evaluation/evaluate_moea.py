@@ -39,12 +39,32 @@ def nondominated(points: np.ndarray | List[List[float]]) -> np.ndarray:
 def hypervolume_2d(front: np.ndarray, ref: Tuple[float, float]) -> float:
     if len(front) == 0:
         return 0.0
+
+    front = np.asarray(front, dtype=float)
+    front = front[np.all(np.isfinite(front), axis=1)]
+    if len(front) == 0:
+        return 0.0
     front = front[np.argsort(front[:, 0])]
-    hv, prev_f1 = 0.0, ref[1]
+
+    hv = 0.0
+    best_f1 = ref[1]
     for f0, f1 in front:
-        hv += max(0.0, ref[0] - f0) * max(0.0, prev_f1 - f1)
-        prev_f1 = f1
+        width = max(0.0, ref[0] - float(f0))
+        if width == 0.0:
+            continue
+
+        #  Clip f1 to the current best value and the reference point to ensure
+        #  that the rectangles never extend outside of the dominated region.
+        f1_clipped = min(float(f1), best_f1, ref[1])
+        height = max(0.0, best_f1 - f1_clipped)
+        if height == 0.0:
+            continue
+
+        hv += width * height
+        best_f1 = f1_clipped
+
     return hv
+
 
 
 def _bounding_box_volume(ref_point: np.ndarray, mins: np.ndarray) -> float:
