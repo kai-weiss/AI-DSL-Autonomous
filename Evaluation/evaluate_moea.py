@@ -244,20 +244,8 @@ def run_eps_constraint(
     )
     objs = [ind.objectives for ind in pop]
     final_front = nondominated(objs)
-    num_obj = alg.num_objectives
-    if final_front.size == 0:
-        final_front = np.empty((0, num_obj), dtype=float)
-    else:
-        final_front = final_front.reshape((-1, num_obj))
-
-    history_fronts = []
-    for front in history:
-        arr = np.asarray(front, dtype=float)
-        if arr.size == 0:
-            arr = np.empty((0, num_obj), dtype=float)
-        else:
-            arr = arr.reshape((-1, num_obj))
-        history_fronts.append(arr)
+    # num_obj = alg.num_objectives
+    history_fronts = [np.asarray(front, dtype=float) for front in history]
     return final_front, history_fronts, evaluations, stopped
 
 
@@ -534,10 +522,7 @@ def evaluate_algorithm(
         return after.get(key, 0.0) - before.get(key, 0.0)
 
     for r in range(runs):
-        evaluator = evaluator_factory(
-            force_full_verification=require_full_verification,
-            min_verify_ratio=1.0 if require_full_verification else None,
-        )
+        evaluator = evaluator_factory()
         seed = 17 + r
         budget = gens * pop
         start = time.perf_counter()
@@ -779,7 +764,7 @@ def _summarise_algorithm_runs(
         df = pd.DataFrame(rows)
         if df.empty:
             continue
-        output_path = Path(f"results_{scenario_name}_{alg}.csv")
+        output_path = Path(f"../Data/EvalOutput/results_{scenario_name}_{alg}.csv")
         df.to_csv(output_path, index=False)
         metric_tables[alg] = df.set_index(["Scenario", "run"])
         hv_iqr = df["HV"].quantile(0.75) - df["HV"].quantile(0.25)
@@ -843,7 +828,7 @@ def _summarise_algorithm_runs(
             )
             .reset_index()
         )
-        conv_path = Path(f"hv_convergence_{scenario_name}.csv")
+        conv_path = Path(f"../Data/EvalOutput/hv_convergence_{scenario_name}.csv")
         conv_summary.to_csv(conv_path, index=False)
         print(
             f"Saved HV convergence curves for {scenario_name} → "
@@ -863,7 +848,7 @@ def _summarise_algorithm_runs(
             )
             .reset_index()
         )
-        feas_path = Path(f"feasibility_convergence_{scenario_name}.csv")
+        feas_path = Path(f"../Data/EvalOutput/feasibility_convergence_{scenario_name}.csv")
         feas_summary.to_csv(feas_path, index=False)
         print(
             f"Saved feasibility convergence curves for {scenario_name} → "
@@ -898,16 +883,16 @@ def evaluate_scenario(
 
     def evaluator_factory(
             *,
-            force_full_verification: bool = False,
             min_verify_ratio: float | None = None,
     ) -> MemoisedEvaluator:
-        kwargs = {"force_full_verification": force_full_verification}
+        kwargs = {}
         if min_verify_ratio is not None:
             kwargs["min_verify_ratio"] = min_verify_ratio
         return MemoisedEvaluator(make_evaluator(model, **kwargs), var_names)
 
     results: Dict[str, Dict[str, object]] = {}
     all_fronts: List[np.ndarray] = []
+    run_records: List[Dict[str, object]] = []
     cache_totals = {
         "hits": 0,
         "misses": 0,
@@ -937,6 +922,25 @@ def evaluate_scenario(
         results[alg] = data
         for rec in data["runs"]:
             all_fronts.append(rec["front"])
+            run_records.append(
+                {
+                    "Scenario": scenario_name,
+                    "Algorithm": alg,
+                    "run": rec["run"],
+                    "front": rec["front"],
+                    "runtime_s": rec.get("runtime"),
+                    "evaluations": rec.get("evaluations"),
+                    "evaluate_time_s": rec.get("evaluate_seconds"),
+                    "evaluate_calls": rec.get("evaluate_calls"),
+                    "verifyta_time_s": rec.get("verifyta_seconds"),
+                    "verifyta_calls": rec.get("verifyta_calls"),
+                    "verifyta_pct": rec.get("verifyta_percentage"),
+                    "feasible_calls": rec.get("feasible_calls"),
+                    "infeasible_calls": rec.get("infeasible_calls"),
+                    "total_calls": rec.get("total_calls"),
+                    "feasibility_rate": rec.get("feasibility_rate"),
+                }
+            )
         totals = data.get("cache_totals") or {}
         for key in cache_totals:
             cache_totals[key] += totals.get(key, 0)
@@ -954,6 +958,7 @@ def evaluate_scenario(
         "metric_tables": summary["metric_tables"],
         "convergence": summary["convergence"],
         "feasibility": summary["feasibility"],
+        "run_records": run_records,
     }
 
 
@@ -1064,6 +1069,216 @@ def _aggregate_summary_tables(metric_tables: Dict[str, pd.DataFrame]) -> pd.Data
     return pd.DataFrame(rows)
 
 
+def _global_cross_scenario_summary(
+        run_records: List[Dict[str, object]]
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if not run_records:
+        return pd.DataFrame(), pd.DataFrame()
+
+    filtered: List[Dict[str, object]] = []
+    all_points: List[np.ndarray] = []
+    for rec in run_records:
+        front = rec.get("front")
+        if isinstance(front, np.ndarray) and front.size > 0:
+            filtered.append(rec)
+            all_points.append(front)
+
+    if not filtered or not all_points:
+        return pd.DataFrame(), pd.DataFrame()
+
+    stacked = np.vstack(all_points)
+    if not np.isfinite(stacked).all():
+        mask = np.all(np.isfinite(stacked), axis=1)
+        stacked = stacked[mask]
+    if stacked.size == 0:
+        return pd.DataFrame(), pd.DataFrame()
+    num_objectives = stacked.shape[1]
+    if num_objectives != 2:
+        raise ValueError(
+            "Global cross-scenario summary currently supports only two objectives"
+        )
+
+    global_mins = np.min(stacked, axis=0)
+    global_maxs = np.max(stacked, axis=0)
+    global_ranges = np.where(global_maxs > global_mins, global_maxs - global_mins, 1.0)
+
+    def _normalise_front(front: np.ndarray) -> np.ndarray:
+        norm = (front - global_mins) / global_ranges
+        return np.asarray(norm, dtype=float)
+
+    normalised_fronts = []
+    valid_filtered: List[Dict[str, object]] = []
+    for rec in filtered:
+        norm = _normalise_front(rec["front"])
+        if norm.size == 0:
+            continue
+        norm = np.asarray(norm, dtype=float)
+        mask = np.all(np.isfinite(norm), axis=1)
+        norm = norm[mask]
+        if norm.size == 0:
+            continue
+        normalised_fronts.append(norm)
+        valid_filtered.append(rec)
+
+    if not normalised_fronts:
+        return pd.DataFrame(), pd.DataFrame()
+
+    filtered = valid_filtered
+    stacked_norm = np.vstack(normalised_fronts)
+    global_reference_front = nondominated(stacked_norm)
+    if global_reference_front.size == 0:
+        global_reference_front = stacked_norm
+
+    global_max_norm = np.max(stacked_norm, axis=0)
+    ref_point = global_max_norm + 0.1
+
+    def _safe_float(value: object) -> float:
+        if value is None:
+            return float("nan")
+        try:
+            result = float(value)
+        except (TypeError, ValueError):
+            return float("nan")
+        return result if math.isfinite(result) else float("nan")
+
+    per_run_rows = []
+    for rec, norm_front in zip(filtered, normalised_fronts):
+        if norm_front.size == 0:
+            continue
+        norm_front = nondominated(norm_front)
+        hv_value = hypervolume_2d(norm_front, tuple(ref_point))
+        igd_value = igd_plus(norm_front, global_reference_front)
+        per_run_rows.append(
+            {
+                "Scenario": rec["Scenario"],
+                "Algorithm": rec["Algorithm"],
+                "run": rec.get("run"),
+                "HV": hv_value,
+                "IGD+": igd_value,
+                "runtime_s": _safe_float(rec.get("runtime_s")),
+                "evaluations": _safe_float(rec.get("evaluations")),
+                "evaluate_time_s": _safe_float(rec.get("evaluate_time_s")),
+                "evaluate_calls": _safe_float(rec.get("evaluate_calls")),
+                "verifyta_time_s": _safe_float(rec.get("verifyta_time_s")),
+                "verifyta_calls": _safe_float(rec.get("verifyta_calls")),
+                "verifyta_pct": _safe_float(rec.get("verifyta_pct")),
+                "feasible_calls": _safe_float(rec.get("feasible_calls")),
+                "infeasible_calls": _safe_float(rec.get("infeasible_calls")),
+                "total_calls": _safe_float(rec.get("total_calls")),
+                "feasibility_rate": _safe_float(rec.get("feasibility_rate")),
+            }
+        )
+
+    per_run_df = pd.DataFrame(per_run_rows)
+    if per_run_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    def _finite_array(series: pd.Series) -> np.ndarray:
+        arr = series.to_numpy(dtype=float)
+        return arr[np.isfinite(arr)]
+
+    def _iqr_from_series(series: pd.Series) -> float:
+        values = _finite_array(series)
+        if values.size == 0:
+            return float("nan")
+        q75, q25 = np.quantile(values, [0.75, 0.25])
+        return float(q75 - q25)
+
+    def _median_from_series(series: pd.Series) -> float:
+        values = _finite_array(series)
+        if values.size == 0:
+            return float("nan")
+        return float(np.median(values))
+
+    rng = np.random.default_rng(2024)
+    summary_rows = []
+    for alg, df_alg in per_run_df.groupby("Algorithm"):
+        hv_values = _finite_array(df_alg["HV"])
+        igd_values = _finite_array(df_alg["IGD+"])
+
+        hv_median = float(np.median(hv_values)) if hv_values.size else float("nan")
+        igd_median = float(np.median(igd_values)) if igd_values.size else float("nan")
+        hv_iqr = _iqr_from_series(df_alg["HV"])
+        igd_iqr = _iqr_from_series(df_alg["IGD+"])
+        hv_ci = bootstrap_ci(hv_values, rng=rng) if hv_values.size else (float("nan"), float("nan"))
+        igd_ci = bootstrap_ci(igd_values, rng=rng) if igd_values.size else (float("nan"), float("nan"))
+
+        runtime_median = _median_from_series(df_alg["runtime_s"])
+        runtime_iqr = _iqr_from_series(df_alg["runtime_s"])
+        evaluations_median = _median_from_series(df_alg["evaluations"])
+        eval_time_median = _median_from_series(df_alg["evaluate_time_s"])
+        eval_calls_median = _median_from_series(df_alg["evaluate_calls"])
+        verify_time_median = _median_from_series(df_alg["verifyta_time_s"])
+        verify_calls_median = _median_from_series(df_alg["verifyta_calls"])
+        verify_share_median = _median_from_series(df_alg["verifyta_pct"])
+        feasible_calls_median = _median_from_series(df_alg["feasible_calls"])
+        infeasible_calls_median = _median_from_series(df_alg["infeasible_calls"])
+        feasibility_rate_median = _median_from_series(df_alg["feasibility_rate"])
+
+        total_feasible = df_alg["feasible_calls"].dropna().sum()
+        total_calls = df_alg["total_calls"].dropna().sum()
+        feasibility_rate_overall = (
+            float(total_feasible) / float(total_calls)
+            if total_calls and total_calls > 0
+            else float("nan")
+        )
+
+        def _to_int_or_nan(value: float) -> float:
+            if not math.isfinite(value):
+                return float("nan")
+            return float(int(round(value)))
+
+        summary_rows.append(
+            {
+                "Algorithm": alg,
+                "HV (median)": hv_median,
+                "HV (IQR)": hv_iqr,
+                "HV median 95% CI": _format_ci(hv_ci),
+                "IGD+ (median)": igd_median,
+                "IGD+ (IQR)": igd_iqr,
+                "IGD+ median 95% CI": _format_ci(igd_ci),
+                "Runtime (median s)": runtime_median,
+                "Runtime (IQR s)": runtime_iqr,
+                "Evaluations/run": _to_int_or_nan(evaluations_median),
+                "Eval time (median s)": eval_time_median,
+                "Eval calls/run": _to_int_or_nan(eval_calls_median),
+                "Verifyta time (median s)": verify_time_median,
+                "Verifyta calls/run": _to_int_or_nan(verify_calls_median),
+                "Verifyta share (median %)": verify_share_median,
+                "Feasible calls/run": feasible_calls_median,
+                "Infeasible calls/run": infeasible_calls_median,
+                "Feasibility rate (median)": feasibility_rate_median,
+                "Feasibility rate (overall)": feasibility_rate_overall,
+            }
+        )
+
+    summary_df = pd.DataFrame(summary_rows)
+    if not summary_df.empty:
+        column_order = [
+            "Algorithm",
+            "HV (median)",
+            "HV (IQR)",
+            "HV median 95% CI",
+            "IGD+ (median)",
+            "IGD+ (IQR)",
+            "IGD+ median 95% CI",
+            "Runtime (median s)",
+            "Runtime (IQR s)",
+            "Evaluations/run",
+            "Eval time (median s)",
+            "Eval calls/run",
+            "Verifyta time (median s)",
+            "Verifyta calls/run",
+            "Verifyta share (median %)",
+            "Feasible calls/run",
+            "Infeasible calls/run",
+            "Feasibility rate (median)",
+            "Feasibility rate (overall)",
+        ]
+        summary_df = summary_df[column_order]
+    return summary_df, per_run_df
+
+
 def _wilcoxon_tests(metric_tables: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     test_rows = []
     for left, right in itertools.combinations(metric_tables.keys(), 2):
@@ -1106,10 +1321,11 @@ def main():
     parser.add_argument(
         "--algorithms",
         nargs="+",
-        default=["nsga2", "eps-constraint"], # 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'
+        default=['random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'],
+        # 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'
         help="Algorithms to evaluate",
     )
-    parser.add_argument("--runs", type=int, default=2, help="Number of runs per algorithm")
+    parser.add_argument("--runs", type=int, default=10, help="Number of runs per algorithm")
     parser.add_argument(
         "--generations",
         type=int,
@@ -1160,6 +1376,7 @@ def main():
     metric_table_lists: Dict[str, List[pd.DataFrame]] = defaultdict(list)
     convergence_records = []
     feasibility_records = []
+    global_run_records: List[Dict[str, object]] = []
 
     for dsl_path in dsl_paths:
         scenario_data = evaluate_scenario(
@@ -1179,6 +1396,7 @@ def main():
 
         convergence_records.append(scenario_data["convergence"])
         feasibility_records.append(scenario_data["feasibility"])
+        global_run_records.extend(scenario_data.get("run_records", []))
 
     combined_metric_tables = _combine_metric_tables(metric_table_lists)
 
@@ -1186,6 +1404,17 @@ def main():
     if not overall_summary.empty:
         print("\n=== Aggregated summary across scenarios ===")
         print(overall_summary.to_markdown(index=False, floatfmt=".4g"))
+
+    global_summary, global_runs = _global_cross_scenario_summary(global_run_records)
+    if not global_summary.empty:
+        print("\n=== Global cross-scenario summary (normalised metrics) ===")
+        print(
+            "Note: HV and IGD+ recomputed after global min–max normalisation "
+            "with a shared reference point and reference front."
+        )
+        print(global_summary.to_markdown(index=False, floatfmt=".4g"))
+        global_summary.to_csv(Path("global_cross_scenario_summary.csv"), index=False)
+        global_runs.to_csv(Path("global_cross_scenario_runs.csv"), index=False)
 
     _print_metric_tables(combined_metric_tables)
 
@@ -1201,7 +1430,7 @@ def main():
             )
             .reset_index()
         )
-        conv_summary.to_csv(Path("hv_convergence.csv"), index=False)
+        conv_summary.to_csv(Path("../Data/EvalOutput/hv_convergence.csv"), index=False)
         print("Saved aggregated HV convergence curves → hv_convergence.csv")
 
     combined_feasibility = [df for df in feasibility_records if not df.empty]
@@ -1216,7 +1445,7 @@ def main():
             )
             .reset_index()
         )
-        feas_summary.to_csv(Path("feasibility_convergence.csv"), index=False)
+        feas_summary.to_csv(Path("../Data/EvalOutput/feasibility_convergence.csv"), index=False)
         print(
             "Saved aggregated feasibility convergence curves → "
             "feasibility_convergence.csv"
