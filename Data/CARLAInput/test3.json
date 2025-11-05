@@ -24,14 +24,14 @@
   },
 
   "components": [
-    { "name": "Setup_A", "vehicle": "A", "behaviour": "tm_autopilot_setup_A", "wcet": "1ms", "deadline": "5ms",
+    { "name": "Setup_A", "vehicle": "A", "behaviour": "tm_autopilot_setup_A",
       "config": {"ignore_lights_percentage": 0 } },
 
     { "name": "InteriorLight_A", "vehicle":"A","behaviour":"interior_light","period":"40ms","deadline":"40ms","wcet":"10ms","priority":7 },
     { "name": "Perception_A", "vehicle":"A","behaviour":"autopilot","period":"40ms","deadline":"40ms","wcet":"10ms","priority":5 },
     { "name": "AckHandler_A", "vehicle":"A","behaviour":"ack_handler","deadline":"4ms","wcet":"2ms","priority":2 },
 
-    { "name": "Setup_B", "vehicle": "B", "behaviour": "tm_autopilot_setup_B", "wcet": "1ms", "deadline": "5ms" ,
+    { "name": "Setup_B", "vehicle": "B", "behaviour": "tm_autopilot_setup_B",
       "config": {"ignore_lights_percentage": 0 } },
 
     { "name": "Crash_B","vehicle":"B","behaviour":"emergency_stop","deadline":"40ms","wcet":"10ms","priority":0 },
