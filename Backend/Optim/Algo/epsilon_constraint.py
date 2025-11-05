@@ -12,7 +12,7 @@ from .common import Individual, PlateauDetector
 """Epsilon-constraint scalarisation paired with CMA-ES and LNS tweaks."""
 
 _INF_PENALTY = 1e8
-_DEFAULT_LEVELS = 7
+_DEFAULT_LEVELS = 10
 _LN_STEP_LIMIT = 2
 
 
@@ -121,6 +121,7 @@ class EpsilonConstraint:
         self._infeasible_value = _INF_PENALTY
         self._constraint_tol = 1e-6
         self._penalty_scale = 1.0
+        self._penalty_smoothing: List[float] = []
 
         self._discrete_steps: Dict[int, float] = self._infer_discrete_steps()
         self._max_feasibility_attempts = 50
@@ -196,7 +197,9 @@ class EpsilonConstraint:
     ):
         warmup = self._warmup_samples()
         epsilon_schedule = self._build_epsilon_schedule(warmup)
-        self._penalty_scale = self._estimate_penalty_scale(warmup)
+        penalty_scale, smoothing = self._estimate_penalty_parameters(warmup)
+        self._penalty_scale = penalty_scale
+        self._penalty_smoothing = smoothing
 
         history: List[List[List[float]]] = []
         stopped_early = False
@@ -522,7 +525,20 @@ class EpsilonConstraint:
             if not math.isfinite(bound):
                 continue
             violation = max(0.0, val - bound)
-            penalty += violation
+            if violation <= 0.0:
+                continue
+            smooth = (
+                self._penalty_smoothing[idx - 1]
+                if idx - 1 < len(self._penalty_smoothing)
+                else 0.0
+            )
+            if smooth > 0.0:
+                if violation <= smooth:
+                    penalty += (violation * violation) / (2.0 * smooth)
+                else:
+                    penalty += violation - (smooth / 2.0)
+            else:
+                penalty += violation
         return primary + self._penalty_scale * penalty
 
     # ------------------------------------------------------------------
@@ -597,21 +613,43 @@ class EpsilonConstraint:
             for s in samples
             if all(math.isfinite(v) and v < self._infeasible_value for v in s)
         ]
+        inf_eps = [float("inf")] * (self.num_objectives - 1)
+        feasible_samples = [
+            s for s in valid_samples if self._is_feasible(s, inf_eps)
+        ]
 
         epsilon_lists: List[List[float]] = []
         for obj_idx in range(1, self.num_objectives):
-            values = [sample[obj_idx] for sample in valid_samples]
+            feasible_values = [sample[obj_idx] for sample in feasible_samples]
+            source = feasible_values if len(feasible_values) >= 3 else None
+            values = source if source is not None else [
+                sample[obj_idx] for sample in valid_samples
+            ]
             if not values:
                 epsilon_lists.append([float("inf")])
                 continue
-            low = float(min(values))
-            high = float(max(values))
+            if source is not None:
+                low = float(np.quantile(values, 0.2))
+                high = float(np.quantile(values, 0.8))
+            else:
+                low = float(min(values))
+                high = float(max(values))
             if math.isclose(low, high):
                 epsilon_lists.append([float("inf"), high])
                 continue
-            levels = np.linspace(low, high, self.epsilon_levels)
+            if high < low:
+                low, high = high, low
+            if math.isclose(low, high):
+                epsilon_lists.append([float("inf"), high])
+                continue
+            levels = np.linspace(high, low, self.epsilon_levels)
             seq = [float("inf")]
-            seq.extend(float(v) for v in sorted(set(levels), reverse=True))
+            prev = None
+            for level in levels:
+                val = float(level)
+                if prev is None or not math.isclose(val, prev, rel_tol=1e-9, abs_tol=1e-9):
+                    seq.append(val)
+                    prev = val
             epsilon_lists.append(seq)
 
         if not epsilon_lists:
@@ -630,18 +668,45 @@ class EpsilonConstraint:
         return schedule
 
     # ------------------------------------------------------------------
-    def _estimate_penalty_scale(self, samples: List[List[float]]) -> float:
+    def _estimate_penalty_parameters(
+            self, samples: List[List[float]]
+    ) -> tuple[float, List[float]]:
         primary_vals = [
             s[0]
             for s in samples
             if math.isfinite(s[0]) and s[0] < self._infeasible_value
         ]
-        if not primary_vals:
-            return 100.0
-        span = max(primary_vals) - min(primary_vals)
-        base = max(abs(min(primary_vals)), 1.0)
-        scale = max(span, base)
-        return max(10.0, scale * 10.0)
+        if primary_vals:
+            span = max(primary_vals) - min(primary_vals)
+            base = max(abs(min(primary_vals)), 1.0)
+            scale_source = span if span > 1e-9 else base
+            penalty_scale = max(5.0, scale_source * 3.0)
+        else:
+            penalty_scale = 50.0
+
+        smoothing: List[float] = []
+        for obj_idx in range(1, self.num_objectives):
+            values = [
+                s[obj_idx]
+                for s in samples
+                if len(s) > obj_idx
+                   and math.isfinite(s[obj_idx])
+                   and s[obj_idx] < self._infeasible_value
+            ]
+            if len(values) >= 3:
+                span = max(values) - min(values)
+                base = max(abs(min(values)), 1.0)
+                smooth = max(span * 0.1, base * 0.05)
+            elif len(values) == 2:
+                span = abs(values[1] - values[0])
+                smooth = max(span * 0.5, 1.0)
+            elif values:
+                smooth = max(abs(values[0]), 1.0) * 0.1
+            else:
+                smooth = 1.0
+            smoothing.append(max(float(smooth), 1e-6))
+
+        return penalty_scale, smoothing
 
     # ------------------------------------------------------------------
     def _infer_discrete_steps(self) -> Dict[int, float]:
@@ -651,6 +716,5 @@ class EpsilonConstraint:
             if "priority" in lower_name:
                 steps[idx] = 1.0
         return steps
-
 
 __all__ = ["EpsilonConstraint"]

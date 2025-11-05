@@ -449,6 +449,8 @@ def make_evaluator(
             return state["total_evaluations"]
 
     def _should_force_verify(eval_index: int) -> bool:
+        if force_full_verification:
+            return True
         with timing_lock:
             verify_calls = timings["verifyta_calls"]
         with state_lock:
