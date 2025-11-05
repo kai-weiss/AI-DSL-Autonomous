@@ -712,6 +712,11 @@ def main(path: str, generations: int = 500, algorithm: str = "nsga2"):
     best = sorted(population, key=lambda x: (x.rank, -x.crowding_distance))[0]
     assignments = {n: timedelta(milliseconds=v) for n, v in best.values.items()}
     new_model = apply_values(model, assignments)
+
+    (out_dir / "pareto_optimal.adsl").write_text(
+        emit_model(new_model), encoding="utf-8"
+    )
+
     return new_model, best
 
 
