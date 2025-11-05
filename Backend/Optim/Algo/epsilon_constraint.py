@@ -3,7 +3,8 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Sequence, Set, Tuple
+
 
 import numpy as np
 
@@ -114,12 +115,74 @@ class EpsilonConstraint:
         self._initial_sample = sample
         self._solutions: List[_Solution] = []
         self._feasible_points: List[List[float]] = []
+        self._feasible_archive: List[_Solution] = []
+        self._feasible_objective_keys: Set[Tuple[float, ...]] = set()
         self._front_history: List[List[List[float]]] = []
         self._infeasible_value = _INF_PENALTY
         self._constraint_tol = 1e-6
         self._penalty_scale = 1.0
 
         self._discrete_steps: Dict[int, float] = self._infer_discrete_steps()
+        self._max_feasibility_attempts = 50
+        self._epsilon_delta_setter = getattr(
+            self.evaluate, "_set_epsilon_delta_fraction", None
+        )
+        self._epsilon_delta_getter = getattr(
+            self.evaluate, "_get_epsilon_delta_fraction", None
+        )
+        self._base_epsilon_delta = (
+            float(self._epsilon_delta_getter())
+            if self._epsilon_delta_getter is not None
+            else None
+        )
+        self._delta_limit_multiplier = 8.0
+
+        midpoint_vec = np.array(
+            [midpoint[name] for name in self.names], dtype=float
+        )
+        self._midpoint_vector = midpoint_vec
+        self._last_feasible_solution: tuple[np.ndarray, List[float]] | None = None
+        inf_eps = [float("inf")] * (self.num_objectives - 1)
+        if self._is_feasible(sample, inf_eps):
+            self._register_feasible_solution(midpoint_vec, list(sample))
+
+    # ------------------------------------------------------------------
+    def _register_feasible_solution(
+            self, vector: np.ndarray, objectives: Sequence[float]
+    ) -> None:
+        objs = [float(v) for v in objectives]
+        if any(
+                not math.isfinite(val) or val >= self._infeasible_value
+                for val in objs
+        ):
+            return
+        key = tuple(round(val, 9) for val in objs)
+        if key in self._feasible_objective_keys:
+            return
+        stored = np.array(vector, dtype=float)
+        self._feasible_objective_keys.add(key)
+        self._feasible_points.append(objs)
+        self._feasible_archive.append(
+            _Solution(vector=stored, objectives=objs)
+        )
+        self._last_feasible_solution = (stored.copy(), list(objs))
+
+    # ------------------------------------------------------------------
+    def _find_seed_for_epsilon(
+            self, epsilons: Sequence[float]
+    ) -> tuple[np.ndarray, List[float]] | None:
+        if self._last_feasible_solution is not None:
+            vec, objs = self._last_feasible_solution
+            if self._is_feasible(objs, epsilons):
+                return vec.copy(), list(objs)
+        if self._feasible_archive:
+            sorted_archive = sorted(
+                self._feasible_archive, key=lambda sol: sol.objectives[0]
+            )
+            for sol in sorted_archive:
+                if self._is_feasible(sol.objectives, epsilons):
+                    return sol.vector.copy(), list(sol.objectives)
+        return None
 
     # ------------------------------------------------------------------
     def run(
@@ -142,54 +205,131 @@ class EpsilonConstraint:
             (self.bounds[:, 1] - self.bounds[:, 0]) / 3.0, 1e-3
         )
         followup_sigma = np.maximum(default_sigma / 2.0, 1e-3)
-        warm_mean: np.ndarray | None = None
         warm_sigma: np.ndarray | None = None
 
-        for objectives in warmup:
-            if all(
-                    math.isfinite(v) and v < self._infeasible_value for v in objectives
-            ):
-                self._feasible_points.append(list(objectives))
+        if (
+                self._epsilon_delta_setter is not None
+                and self._base_epsilon_delta is not None
+        ):
+            self._epsilon_delta_setter(self._base_epsilon_delta)
 
-        for sweep_idx, epsilons in enumerate(epsilon_schedule):
+        level_overrides: Dict[int, List[float]] = {}
+        level_fail_counts: Dict[int, int] = {}
+        level_delta_fraction: Dict[int, float] = {}
+        level_idx = 0
+
+        while level_idx < len(epsilon_schedule):
             remaining_generations = max(self.generations - generation_idx, 0)
             if remaining_generations <= 0:
                 break
 
-            iterations_left = len(epsilon_schedule) - sweep_idx
-            base_iters = max(1, remaining_generations // iterations_left)
-            # distribute remainder evenly across later sweeps
+            iterations_left = len(epsilon_schedule) - level_idx
+            base_iters = max(1, remaining_generations // max(iterations_left, 1))
             if base_iters + generation_idx > self.generations:
                 base_iters = self.generations - generation_idx
             if base_iters <= 0:
                 base_iters = 1
 
-            best, completed, stopped = self._run_cma_es(
+            eps_override = level_overrides.get(level_idx)
+            epsilons = list(
+                eps_override if eps_override is not None else epsilon_schedule[level_idx]
+            )
+
+            seed = self._find_seed_for_epsilon(epsilons)
+            if seed is None:
+                if level_idx == 0:
+                    level_idx += 1
+                    continue
+                level_overrides[level_idx] = list(epsilon_schedule[level_idx - 1])
+                if (
+                        self._epsilon_delta_setter is not None
+                        and self._base_epsilon_delta is not None
+                ):
+                    level_delta_fraction[level_idx] = self._base_epsilon_delta
+                    self._epsilon_delta_setter(self._base_epsilon_delta)
+                continue
+
+            seed_vec, seed_objs = seed
+            current_delta = level_delta_fraction.get(level_idx, self._base_epsilon_delta)
+            if (
+                    self._epsilon_delta_setter is not None
+                    and current_delta is not None
+            ):
+                self._epsilon_delta_setter(current_delta)
+
+            best, completed, stopped, feasible_count, eval_count = self._run_cma_es(
                 epsilons,
                 base_iters,
                 history,
                 log_history,
                 plateau_detector,
                 generation_idx,
-                mean=warm_mean,
+                mean=seed_vec,
                 sigma=warm_sigma,
+                seed=(seed_vec, seed_objs),
             )
             generation_idx += completed
-
-            if best is not None:
-                best_vec, objs = best
-                warm_mean = best_vec.copy()
-                warm_sigma = followup_sigma.copy()
-                vec = best_vec.copy()
-                vec, objs = self._discrete_lns(vec, objs, epsilons)
-                if self._is_feasible(objs, epsilons):
-                    self._solutions.append(
-                        _Solution(vector=np.array(vec, dtype=float), objectives=objs)
-                    )
 
             if stopped:
                 stopped_early = True
                 break
+
+            retry_level = False
+            if best is not None:
+                best_vec, objs = best
+                warm_sigma = followup_sigma.copy()
+                vec = best_vec.copy()
+                vec, objs = self._discrete_lns(vec, objs, epsilons)
+                if self._is_feasible(objs, epsilons):
+                    final_vec = np.array(vec, dtype=float)
+                    solution = _Solution(vector=final_vec, objectives=objs)
+                    self._solutions.append(solution)
+                    self._register_feasible_solution(final_vec, objs)
+
+            current_fail = level_fail_counts.get(level_idx, 0)
+            if feasible_count <= 0:
+                current_fail += eval_count
+                if current_fail >= self._max_feasibility_attempts:
+                    widened = False
+                    if (
+                            self._epsilon_delta_setter is not None
+                            and self._base_epsilon_delta is not None
+                    ):
+                        current = level_delta_fraction.get(
+                            level_idx, self._base_epsilon_delta
+                        )
+                        if current is None:
+                            current = self._base_epsilon_delta
+                        new_delta = min(
+                            current * 2.0,
+                            self._base_epsilon_delta * self._delta_limit_multiplier,
+                        )
+                        if new_delta > current + 1e-12:
+                            level_delta_fraction[level_idx] = new_delta
+                            self._epsilon_delta_setter(new_delta)
+                            widened = True
+                    if not widened and level_idx > 0:
+                        level_overrides[level_idx] = list(
+                            epsilon_schedule[level_idx - 1]
+                        )
+                        widened = True
+                    current_fail = 0
+                    if widened:
+                        retry_level = True
+            else:
+                current_fail = 0
+                if (
+                        self._epsilon_delta_setter is not None
+                        and self._base_epsilon_delta is not None
+                ):
+                    level_delta_fraction[level_idx] = self._base_epsilon_delta
+                    self._epsilon_delta_setter(self._base_epsilon_delta)
+            level_fail_counts[level_idx] = current_fail
+
+            if retry_level:
+                continue
+
+            level_idx += 1
 
         individuals = self._build_population()
 
@@ -197,7 +337,8 @@ class EpsilonConstraint:
             return individuals, history, self._evaluations, stopped_early
         return individuals
 
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+
     def _run_cma_es(
             self,
             epsilons: Sequence[float],
@@ -209,15 +350,25 @@ class EpsilonConstraint:
             *,
             mean: np.ndarray | None = None,
             sigma: np.ndarray | None = None,
-    ) -> tuple[tuple[np.ndarray, List[float]] | None, int, bool]:
+            seed: tuple[np.ndarray, Sequence[float]] | None = None,
+    ) -> tuple[tuple[np.ndarray, List[float]] | None, int, bool, int, int]:
         default_mean = np.array(
             [(lo + hi) / 2.0 for lo, hi in self.bounds], dtype=float
         )
-        if mean is None:
+        if seed is not None:
+            seed_vec, seed_objs = seed
+            mean = np.array(seed_vec, dtype=float)
+            mean = np.clip(mean, self.bounds[:, 0], self.bounds[:, 1])
+            best_feasible: tuple[np.ndarray, List[float]] | None = (
+                mean.copy(), [float(v) for v in seed_objs]
+            )
+        elif mean is None:
             mean = default_mean
+            best_feasible = None
         else:
             mean = np.array(mean, dtype=float)
             mean = np.clip(mean, self.bounds[:, 0], self.bounds[:, 1])
+            best_feasible = None
 
         default_sigma = np.maximum(
             (self.bounds[:, 1] - self.bounds[:, 0]) / 3.0, 1e-3
@@ -229,14 +380,16 @@ class EpsilonConstraint:
             sigma = np.clip(sigma, 1e-3, None)
 
         mu = max(1, self.pop_size // 2)
-        best_feasible: tuple[np.ndarray, List[float]] | None = None
         success_window: deque[int] = deque(maxlen=8)
         completed = 0
+        feasible_count = 0
+        total_evals = 0
 
         for _ in range(iterations):
             candidates: List[
                 Tuple[float, np.ndarray, List[float], bool]
             ] = []
+            iter_has_feasible = False
             for _ in range(self.pop_size):
                 step = self.rng.normal(size=self.dim) * sigma
                 sample = mean + step
@@ -246,9 +399,13 @@ class EpsilonConstraint:
                 feasible = self._is_feasible(objectives, epsilons)
                 score = self._scalar_score(objectives, epsilons)
                 candidates.append((score, sample, objectives, feasible))
+                total_evals += 1
                 if feasible:
+                    iter_has_feasible = True
+                    feasible_count += 1
+                    self._register_feasible_solution(sample, objectives)
                     if best_feasible is None or objectives[0] < best_feasible[1][0]:
-                        best_feasible = (sample.copy(), objectives)
+                        best_feasible = (sample.copy(), list(objectives))
 
             candidates.sort(key=lambda item: item[0])
             top = candidates[:mu]
@@ -264,10 +421,7 @@ class EpsilonConstraint:
             elif success_rate < 0.15:
                 sigma *= 0.82
 
-            feasible_objs = [obj for _, _, obj, feas in candidates if feas]
-            if feasible_objs:
-                for obj in feasible_objs:
-                    self._feasible_points.append(list(obj))
+            if iter_has_feasible:
                 front = _nondominated(self._feasible_points)
             else:
                 front = self._front_history[-1] if self._front_history else []
@@ -283,11 +437,12 @@ class EpsilonConstraint:
                     and front_copy
                     and plateau_detector.update(front_copy, generation_start + completed)
             ):
-                return best_feasible, completed, True
+                return best_feasible, completed, True, feasible_count, total_evals
 
-        return best_feasible, completed, False
+        return best_feasible, completed, False, feasible_count, total_evals
 
-    # ------------------------------------------------------------------
+        # ------------------------------------------------------------------
+
     def _apply_discrete(self, vector: np.ndarray) -> np.ndarray:
         if not self._discrete_steps:
             return vector
@@ -420,13 +575,14 @@ class EpsilonConstraint:
     def _warmup_samples(self) -> List[List[float]]:
         samples: List[List[float]] = [list(self._initial_sample)]
         warmup_size = max(self.pop_size, self.dim * 5)
+        inf_eps = [float("inf")] * (self.num_objectives - 1)
         for _ in range(warmup_size):
-            point = [
-                self.rng.uniform(lo, hi) for lo, hi in self.bounds
-            ]
-            point = self._apply_discrete(np.array(point, dtype=float))
-            objectives = list(self._evaluate_vector(point))
+            point = [self.rng.uniform(lo, hi) for lo, hi in self.bounds]
+            point_arr = self._apply_discrete(np.array(point, dtype=float))
+            objectives = list(self._evaluate_vector(point_arr))
             samples.append(objectives)
+            if self._is_feasible(objectives, inf_eps):
+                self._register_feasible_solution(point_arr, objectives)
         return samples
 
     # ------------------------------------------------------------------

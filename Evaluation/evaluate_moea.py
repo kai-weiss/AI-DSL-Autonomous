@@ -661,7 +661,7 @@ def main():
     # runs = 10
     # generations = 80
     # pop = 60
-    runs = 2
+    runs = 10
     generations = 80
     pop = 60
     worker_threads = os.cpu_count() or 1

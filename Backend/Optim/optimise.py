@@ -617,6 +617,18 @@ def make_evaluator(
                 timings["evaluate_total"] += elapsed
                 timings["evaluate_calls"] += 1
 
+    def _set_epsilon_delta_fraction(value: float | None) -> None:
+        nonlocal epsilon_delta_fraction
+        if value is None:
+            return
+        epsilon_delta_fraction = max(float(value), 1e-6)
+
+    def _get_epsilon_delta_fraction() -> float:
+        return float(epsilon_delta_fraction)
+
+    evaluate._set_epsilon_delta_fraction = _set_epsilon_delta_fraction
+    evaluate._get_epsilon_delta_fraction = _get_epsilon_delta_fraction
+
     evaluate._timings = timings
     evaluate._timings_lock = timing_lock
     evaluate._push_active_epsilons = _push_active_epsilons
