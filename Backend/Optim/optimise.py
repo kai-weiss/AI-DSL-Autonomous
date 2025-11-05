@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List, Callable
+from typing import Callable, Dict, List, Sequence
 from datetime import timedelta
 import random
 import time
 from threading import Lock
 import math
+from contextvars import ContextVar
 
 import numpy as np
 
@@ -386,7 +387,7 @@ class _RidgeRegressor:
 def make_evaluator(
         base_model: Model,
         *,
-        min_verify_ratio: float = 0.1,
+        min_verify_ratio: float | None = 0.1,
         force_full_verification: bool = False,
 ) -> Callable[[Dict[str, float]], List[float]]:
     verifier = UppaalVerifier()
@@ -397,6 +398,18 @@ def make_evaluator(
     ranges = {
         name: max(bounds[name][1] - bounds[name][0], 1e-9) for name in var_names
     }
+
+    active_epsilons: ContextVar[tuple[float, ...] | None] = ContextVar(
+        "active_epsilons", default=None
+    )
+
+    def _push_active_epsilons(values: Sequence[float] | None):
+        if values is None:
+            return active_epsilons.set(None)
+        return active_epsilons.set(tuple(float(v) for v in values))
+
+    def _reset_active_epsilons(token) -> None:
+        active_epsilons.reset(token)
 
     def _normalise(values: Dict[str, float]) -> np.ndarray:
         features = []
@@ -424,7 +437,10 @@ def make_evaluator(
     }
 
     min_early_verifications = max(10, len(var_names) * 4)
-    verify_ratio_threshold = max(min_verify_ratio, 0.0)
+    if min_verify_ratio is None:
+        verify_ratio_threshold = 0.0
+    else:
+        verify_ratio_threshold = max(min_verify_ratio, 0.0)
     max_skip_without_verify = 25
 
     def _register_evaluation() -> int:
@@ -433,8 +449,6 @@ def make_evaluator(
             return state["total_evaluations"]
 
     def _should_force_verify(eval_index: int) -> bool:
-        if force_full_verification:
-            return True
         with timing_lock:
             verify_calls = timings["verifyta_calls"]
         with state_lock:
@@ -496,6 +510,34 @@ def make_evaluator(
                 return True
         return False
 
+    epsilon_delta_fraction = 0.03
+
+    def _near_active_epsilon(predicted: List[float]) -> bool:
+        active = active_epsilons.get()
+        if not active or not obj_mins or not obj_maxs:
+            return False
+        for idx, eps in enumerate(active, start=1):
+            if idx >= len(predicted):
+                break
+            pred_val = predicted[idx]
+            if not math.isfinite(pred_val) or not math.isfinite(eps):
+                continue
+            min_val = obj_mins[idx] if idx < len(obj_mins) else float("inf")
+            max_val = obj_maxs[idx] if idx < len(obj_maxs) else float("-inf")
+            if not math.isfinite(min_val) or not math.isfinite(max_val):
+                span = max(abs(pred_val), 1.0)
+            else:
+                span = max_val - min_val
+                if not math.isfinite(span) or span <= 1e-9:
+                    base = max(abs(min_val), abs(max_val), 1.0)
+                    span = base
+            delta = epsilon_delta_fraction * span
+            if delta <= 0.0:
+                delta = epsilon_delta_fraction
+            if abs(pred_val - float(eps)) <= delta:
+                return True
+        return False
+
     def evaluate(values: Dict[str, float]) -> List[float]:
         nonlocal regressors, obj_mins, obj_maxs
         eval_index = _register_evaluation()
@@ -503,28 +545,32 @@ def make_evaluator(
         features = _normalise(values)
 
         try:
-            if not force_full_verification:
-                if (
+            force_verify_due_to_epsilon = False
+            if (
 
-                        pareto_front
-                        and regressors
-                        and all(r.ready for r in regressors)
-                ):
-                    predicted = [r.predict(features) for r in regressors]
-                    if all(p is not None for p in predicted) and _predicted_dominated(
-                            [float(p) for p in predicted]
-                    ):
+                    pareto_front
+                    and regressors
+                    and all(r.ready for r in regressors)
+            ):
+                predicted = [r.predict(features) for r in regressors]
+                if all(p is not None for p in predicted):
+                    predicted_vals = [float(p) for p in predicted]
+                    if _near_active_epsilon(predicted_vals):
+                        force_verify_due_to_epsilon = True
+                    elif _predicted_dominated(predicted_vals):
                         if not _should_force_verify(eval_index):
                             return [1e9, 1e9]
 
-                if (
-                        constraints
-                        and feasibility_filter.ready
-                ):
-                    proba = feasibility_filter.predict_proba(features)
-                    if proba is not None and proba < 0.25:
-                        if not _should_force_verify(eval_index):
-                            return [1e9, 1e9]
+            if (
+
+                    not force_verify_due_to_epsilon
+                    and constraints
+                    and feasibility_filter.ready
+            ):
+                proba = feasibility_filter.predict_proba(features)
+                if proba is not None and proba < 0.25:
+                    if not _should_force_verify(eval_index):
+                        return [1e9, 1e9]
 
             assignments = {
                 name: timedelta(milliseconds=v) for name, v in values.items()
@@ -573,6 +619,9 @@ def make_evaluator(
 
     evaluate._timings = timings
     evaluate._timings_lock = timing_lock
+    evaluate._push_active_epsilons = _push_active_epsilons
+    evaluate._reset_active_epsilons = _reset_active_epsilons
+    evaluate._active_epsilons_var = active_epsilons
 
     return evaluate
 

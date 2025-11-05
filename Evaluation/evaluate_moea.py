@@ -492,7 +492,6 @@ def evaluate_algorithm(
         worker_threads: int | None = None,
 ):
     runner, has_gens = ALGORITHMS[key]
-    require_full_verification = key == "eps-constraint"
 
     run_records = []
     cache_totals = {
@@ -518,10 +517,7 @@ def evaluate_algorithm(
         return after.get(key, 0.0) - before.get(key, 0.0)
 
     for r in range(runs):
-        evaluator = evaluator_factory(
-            force_full_verification=require_full_verification,
-            min_verify_ratio=1.0 if require_full_verification else None,
-        )
+        evaluator = evaluator_factory()
         seed = 17 + r
         budget = gens * pop
         start = time.perf_counter()
@@ -678,10 +674,9 @@ def main():
 
     def evaluator_factory(
             *,
-            force_full_verification: bool = False,
             min_verify_ratio: float | None = None,
     ) -> MemoisedEvaluator:
-        kwargs = {"force_full_verification": force_full_verification}
+        kwargs = {}
         if min_verify_ratio is not None:
             kwargs["min_verify_ratio"] = min_verify_ratio
         return MemoisedEvaluator(make_evaluator(model, **kwargs), var_names)

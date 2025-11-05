@@ -242,7 +242,7 @@ class EpsilonConstraint:
                 sample = mean + step
                 sample = np.clip(sample, self.bounds[:, 0], self.bounds[:, 1])
                 sample = self._apply_discrete(sample)
-                objectives = list(self._evaluate_vector(sample))
+                objectives = list(self._evaluate_vector(sample, epsilons))
                 feasible = self._is_feasible(objectives, epsilons)
                 score = self._scalar_score(objectives, epsilons)
                 candidates.append((score, sample, objectives, feasible))
@@ -321,7 +321,7 @@ class EpsilonConstraint:
                         np.clip(current + delta, self.bounds[idx][0], self.bounds[idx][1])
                     )
                     candidate = self._apply_discrete(candidate)
-                    objs = list(self._evaluate_vector(candidate))
+                    objs = list(self._evaluate_vector(candidate, epsilons))
                     if not self._is_feasible(objs, epsilons):
                         continue
                     if objs[0] + 1e-9 < best_objs[0]:
@@ -334,9 +334,22 @@ class EpsilonConstraint:
         return best_vec, best_objs
 
     # ------------------------------------------------------------------
-    def _evaluate_vector(self, vector: np.ndarray) -> Sequence[float]:
+    def _evaluate_vector(
+            self,
+            vector: np.ndarray,
+            epsilons: Sequence[float] | None = None,
+    ) -> Sequence[float]:
         values = {name: float(v) for name, v in zip(self.names, vector)}
-        result = tuple(float(x) for x in self.evaluate(values))
+        token = None
+        push = getattr(self.evaluate, "_push_active_epsilons", None)
+        reset = getattr(self.evaluate, "_reset_active_epsilons", None)
+        if epsilons is not None and push is not None and reset is not None:
+            token = push(epsilons)
+        try:
+            result = tuple(float(x) for x in self.evaluate(values))
+        finally:
+            if token is not None:
+                reset(token)
         self._evaluations += 1
         return result
 
