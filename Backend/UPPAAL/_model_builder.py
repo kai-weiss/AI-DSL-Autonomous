@@ -4,7 +4,7 @@ import re
 import tempfile
 import xml.etree.ElementTree as ET
 from typing import Dict, List, Pattern
-
+from pathlib import Path
 from DSL.metamodel import Component, Model
 
 from Backend.UPPAAL._conversions import get_latency_budget, to_ms
@@ -35,7 +35,7 @@ class ModelBuilder:
             return "GLOBAL"
         return re.sub(r"\W", "_", vehicle)
 
-    def build(self, model: Model) -> QueryBundle:
+    def build(self, model: Model, scratch_dir: Path | str | None = None) -> QueryBundle:
         nta = ET.Element("nta")
         global_decl = ET.SubElement(nta, "declaration")
 
@@ -308,7 +308,7 @@ class ModelBuilder:
         tree = ET.ElementTree(nta)
         ET.indent(tree, space="  ", level=0)
 
-        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as xf:
+        with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False, dir=scratch_dir) as xf:
             xf.write(
                 "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                 "<!DOCTYPE nta PUBLIC \"-//Uppaal Team//DTD Flat System 1.5//EN\" "

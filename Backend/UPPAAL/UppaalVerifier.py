@@ -40,49 +40,64 @@ class UppaalVerifier:
         - None: verifyta unavailable or PROPERTY not recognised
         """
 
-        bundle = self._builder.build(model)
+        cleanup_dir: tempfile.TemporaryDirectory[str] | None = None
+        scratch_dir: Path | str | None = None
 
-        if xml_out is not None:
-            dest = Path(xml_out)
-            dest.unlink(missing_ok=True)
-            Path(bundle.nta_path).rename(dest)
-            bundle = QueryBundle(str(dest), bundle.queries)
+        if xml_out is None:
+            cleanup_dir = tempfile.TemporaryDirectory()
+            scratch_dir = Path(cleanup_dir.name)
 
         results: Dict[str, bool | None] = {}
 
-        for prop_name in props:
-            query = bundle.queries.get(prop_name)
-            if query is None:
-                raw = prop_name.strip()
-                query = raw if raw.startswith("A") or raw.startswith("E") else f"A[] {raw}"
+        try:
+            bundle = self._builder.build(model, scratch_dir=scratch_dir)
+            nta_path = Path(bundle.nta_path)
 
-            with tempfile.NamedTemporaryFile("w", suffix=".q", delete=False) as qf:
-                qf.write(query)
-                qfile = qf.name
+            if xml_out is not None:
+                dest = Path(xml_out)
+                dest.unlink(missing_ok=True)
+                nta_path.rename(dest)
+                bundle = QueryBundle(str(dest), bundle.queries)
 
-            try:
-                proc = subprocess.run(
-                    [
-                        self.verifyta,
-                        "-t",
-                        "0",
-                        "-y",
-                        "-u",
-                        bundle.nta_path,
-                        qfile,
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                )
-                out_lower = proc.stdout.lower()
-                # print(out_lower)
-                results[prop_name] = (
-                    "formula is satisfied" in out_lower or "pass" in out_lower
-                )
-            except FileNotFoundError:
-                results[prop_name] = None
-            finally:
-                os.remove(qfile)
+            for prop_name in props:
+                query = bundle.queries.get(prop_name)
+                if query is None:
+                    raw = prop_name.strip()
+                    query = raw if raw.startswith("A") or raw.startswith("E") else f"A[] {raw}"
+
+                with tempfile.NamedTemporaryFile("w", suffix=".q", delete=False) as qf:
+                    qf.write(query)
+                    qfile = qf.name
+
+                try:
+                    proc = subprocess.run(
+                        [
+                            self.verifyta,
+                            "-t",
+                            "0",
+                            "-y",
+                            "-u",
+                            bundle.nta_path,
+                            qfile,
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    )
+                    out_lower = proc.stdout.lower()
+                    # print(out_lower)
+                    results[prop_name] = (
+                            "formula is satisfied" in out_lower or "pass" in out_lower
+                    )
+                except FileNotFoundError:
+                    results[prop_name] = None
+                finally:
+                    os.remove(qfile)
+        finally:
+            if cleanup_dir is not None:
+                try:
+                    cleanup_dir.cleanup()
+                except FileNotFoundError:
+                    pass
 
         return results
