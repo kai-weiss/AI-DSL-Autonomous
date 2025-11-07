@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Iterable, List
 
 from .behaviour import BehaviourRegistry, ComponentBehaviour, ComponentContext
 from .model import ComponentSpec, ScenarioSpec, VehicleSpec
@@ -16,7 +16,12 @@ class _ComponentRuntime:
     vehicle: VehicleSpec
     behaviour: ComponentBehaviour
     period_s: float | None
+    deadline_s: float | None
+    wcet_s: float | None
     next_activation: float | None = None
+    last_release: float | None = None
+    next_deadline: float | None = None
+    activation_count: int = 0
     actor: Any = None
     setup_complete: bool = False
 
@@ -51,9 +56,15 @@ class _ComponentRuntime:
 
         # Trigger the behaviour for every elapsed period
         while self.next_activation is not None and sim_time + 1e-9 >= self.next_activation:
+            activation_time = self.next_activation
+            self.last_release = activation_time
+            if self.deadline_s is not None:
+                self.next_deadline = activation_time + self.deadline_s
+            else:
+                self.next_deadline = None
             self.behaviour.tick(context, self.period_s)
+            self.activation_count += 1
             self.next_activation += self.period_s
-
     def teardown(self, scenario: ScenarioSpec, world: Any) -> None:
         context = ComponentContext(
             scenario=scenario,
@@ -105,11 +116,39 @@ class Scheduler:
                 else:
                     period_s = seconds
 
+            deadline_s = None
+            if component.deadline is not None:
+                seconds = component.deadline.total_seconds()
+                if seconds <= 0:
+                    LOGGER.warning(
+                        "Component '%s' on vehicle '%s' declared non-positive deadline %.3fs; deadline ignored",
+                        component.name,
+                        vehicle.name,
+                        seconds,
+                    )
+                else:
+                    deadline_s = seconds
+
+            wcet_s = None
+            if component.wcet is not None:
+                seconds = component.wcet.total_seconds()
+                if seconds <= 0:
+                    LOGGER.warning(
+                        "Component '%s' on vehicle '%s' declared non-positive WCET %.3fs; WCET ignored",
+                        component.name,
+                        vehicle.name,
+                        seconds,
+                    )
+                else:
+                    wcet_s = seconds
+
             runtime = _ComponentRuntime(
                 component=component,
                 vehicle=vehicle,
                 behaviour=behaviour,
                 period_s=period_s,
+                deadline_s=deadline_s,
+                wcet_s=wcet_s,
                 actor=actor,
             )
             self._components.append(runtime)
