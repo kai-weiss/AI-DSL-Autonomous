@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Iterable, List
 
@@ -24,6 +25,71 @@ class _ComponentRuntime:
     activation_count: int = 0
     actor: Any = None
     setup_complete: bool = False
+    deadline_misses: int = 0
+    wcet_overruns: int = 0
+    total_execution_time_s: float = 0.0
+    last_execution_time_s: float | None = None
+
+    def _component_key(self) -> str:
+        return f"{self.vehicle.name}:{self.component.name}"
+
+    def _run_tick(self, context: ComponentContext, duration_s: float | None) -> tuple[float, bool]:
+        start_wall = time.perf_counter()
+        self.behaviour.tick(context, duration_s)
+        elapsed = time.perf_counter() - start_wall
+        self.last_execution_time_s = elapsed
+        self.total_execution_time_s += elapsed
+        wcet_overrun = False
+        if self.wcet_s is not None and elapsed > self.wcet_s + 1e-9:
+            self.wcet_overruns += 1
+            wcet_overrun = True
+            LOGGER.warning(
+                "Component '%s' on vehicle '%s' exceeded WCET (%.6fs > %.6fs)",
+                self.component.name,
+                self.vehicle.name,
+                elapsed,
+                self.wcet_s,
+            )
+        return elapsed, wcet_overrun
+
+    def _record_metrics(
+        self,
+        scenario: ScenarioSpec,
+        sim_time: float,
+        activation_start: float,
+        elapsed: float,
+        wcet_overrun: bool,
+    ) -> None:
+        deadline_missed = False
+        if self.next_deadline is not None:
+            if sim_time > self.next_deadline + 1e-9:
+                self.deadline_misses += 1
+                deadline_missed = True
+                LOGGER.warning(
+                    "Component '%s' on vehicle '%s' missed deadline by %.6fs",
+                    self.component.name,
+                    self.vehicle.name,
+                    sim_time - self.next_deadline,
+                )
+            self.next_deadline = None
+
+        stats_registry = scenario.properties.setdefault("_component_timing", {})
+        component_stats = stats_registry.setdefault(self._component_key(), {})
+        component_stats.update(
+            {
+                "activation_count": self.activation_count,
+                "last_release": self.last_release,
+                "last_activation_start": activation_start,
+                "last_completion_sim_time": sim_time,
+                "last_execution_time_s": self.last_execution_time_s,
+                "total_execution_time_s": self.total_execution_time_s,
+                "deadline_misses": self.deadline_misses,
+                "wcet_overruns": self.wcet_overruns,
+                "deadline_missed_last": deadline_missed,
+                "wcet_overrun_last": wcet_overrun,
+                "elapsed_time_s": elapsed,
+            }
+        )
 
     def ensure_setup(self, scenario: ScenarioSpec, world: Any) -> None:
         if self.setup_complete:
@@ -48,7 +114,15 @@ class _ComponentRuntime:
             actor=self.actor,
         )
         if self.period_s is None:
-            self.behaviour.tick(context, dt)
+            activation_start = sim_time
+            self.last_release = activation_start
+            if self.deadline_s is not None:
+                self.next_deadline = self.last_release + self.deadline_s
+            else:
+                self.next_deadline = None
+            elapsed, wcet_overrun = self._run_tick(context, dt)
+            self.activation_count += 1
+            self._record_metrics(scenario, sim_time, activation_start, elapsed, wcet_overrun)
             return
 
         if self.next_activation is None:
@@ -59,12 +133,15 @@ class _ComponentRuntime:
             activation_time = self.next_activation
             self.last_release = activation_time
             if self.deadline_s is not None:
-                self.next_deadline = activation_time + self.deadline_s
+                self.next_deadline = self.last_release + self.deadline_s
             else:
                 self.next_deadline = None
-            self.behaviour.tick(context, self.period_s)
+            activation_start = sim_time
+            elapsed, wcet_overrun = self._run_tick(context, self.period_s)
             self.activation_count += 1
+            self._record_metrics(scenario, sim_time, activation_start, elapsed, wcet_overrun)
             self.next_activation += self.period_s
+
     def teardown(self, scenario: ScenarioSpec, world: Any) -> None:
         context = ComponentContext(
             scenario=scenario,
@@ -74,6 +151,19 @@ class _ComponentRuntime:
             actor=self.actor,
         )
         self.behaviour.teardown(context)
+        timing_registry = scenario.properties.get("_component_timing")
+        if isinstance(timing_registry, dict):
+            timing_registry.pop(self._component_key(), None)
+            if not timing_registry:
+                scenario.properties.pop("_component_timing", None)
+        self.next_activation = None
+        self.last_release = None
+        self.next_deadline = None
+        self.activation_count = 0
+        self.deadline_misses = 0
+        self.wcet_overruns = 0
+        self.total_execution_time_s = 0.0
+        self.last_execution_time_s = None
 
 
 @dataclass
