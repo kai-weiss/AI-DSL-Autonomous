@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import Any, Dict, Iterable, Optional, TYPE_CHECKING
+from typing import Any, Dict, Iterable, List, Optional
+
 
 from ..model import ComponentSpec
 from .base import ComponentContext
 
-if TYPE_CHECKING:  # pragma: no cover - type checking only
-    import carla
+import carla
+from ..connections import ConnectionDelivery, ConnectionManager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,6 +63,35 @@ def timedelta_to_seconds(value: Any) -> Optional[float]:
         return float(value.total_seconds())
     except AttributeError:
         return None
+
+def _resolve_connection_manager(context: ComponentContext) -> "ConnectionManager | None":
+    manager = getattr(context, "connection_manager", None)
+    if manager is None:
+        LOGGER.debug(
+            "Connection manager unavailable for component '%s'", context.component_spec.name
+        )
+    return manager
+
+
+def emit_connection_event(
+    context: ComponentContext,
+    payload: Any,
+    connection_name: str | None = None,
+) -> None:
+    manager = _resolve_connection_manager(context)
+    if manager is None:
+        return
+    manager.send(context.component_spec, payload, context.sim_time, connection_name=connection_name)
+
+
+def consume_connection_events(
+    context: ComponentContext,
+    connection_name: str | None = None,
+) -> List["ConnectionDelivery"]:
+    manager = _resolve_connection_manager(context)
+    if manager is None:
+        return []
+    return manager.consume(context.component_spec, connection_name)
 
 
 def ensure_overtake_state(context: ComponentContext) -> Dict[str, Any]:

@@ -18,6 +18,8 @@ class ComponentContext:
     vehicle_spec: VehicleSpec
     component_spec: ComponentSpec
     actor: Optional["carla.Actor"]
+    connection_manager: Any | None = None
+    sim_time: float = 0.0
 
 
 class ComponentBehaviour(Protocol):

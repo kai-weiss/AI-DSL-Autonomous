@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, List
 
 from .behaviour import BehaviourRegistry, ComponentBehaviour, ComponentContext
+from .connections import ConnectionManager
 from .model import ComponentSpec, ScenarioSpec, VehicleSpec
 
 LOGGER = logging.getLogger(__name__)
@@ -91,7 +92,12 @@ class _ComponentRuntime:
             }
         )
 
-    def ensure_setup(self, scenario: ScenarioSpec, world: Any) -> None:
+    def ensure_setup(
+            self,
+            scenario: ScenarioSpec,
+            world: Any,
+            connection_manager: ConnectionManager,
+    ) -> None:
         if self.setup_complete:
             return
         context = ComponentContext(
@@ -100,18 +106,28 @@ class _ComponentRuntime:
             vehicle_spec=self.vehicle,
             component_spec=self.component,
             actor=self.actor,
+            connection_manager=connection_manager,
         )
         self.behaviour.setup(context)
         self.setup_complete = True
 
-    def step(self, scenario: ScenarioSpec, world: Any, sim_time: float, dt: float) -> None:
-        self.ensure_setup(scenario, world)
+    def step(
+        self,
+        scenario: ScenarioSpec,
+        world: Any,
+        sim_time: float,
+        dt: float,
+        connection_manager: ConnectionManager,
+    ) -> None:
+        self.ensure_setup(scenario, world, connection_manager)
         context = ComponentContext(
             scenario=scenario,
             world=world,
             vehicle_spec=self.vehicle,
             component_spec=self.component,
             actor=self.actor,
+            connection_manager=connection_manager,
+            sim_time=sim_time,
         )
         if self.period_s is None:
             activation_start = sim_time
@@ -123,6 +139,7 @@ class _ComponentRuntime:
             elapsed, wcet_overrun = self._run_tick(context, dt)
             self.activation_count += 1
             self._record_metrics(scenario, sim_time, activation_start, elapsed, wcet_overrun)
+            connection_manager.advance(sim_time)
             return
 
         if self.next_activation is None:
@@ -141,14 +158,21 @@ class _ComponentRuntime:
             self.activation_count += 1
             self._record_metrics(scenario, sim_time, activation_start, elapsed, wcet_overrun)
             self.next_activation += self.period_s
+            connection_manager.advance(sim_time)
 
-    def teardown(self, scenario: ScenarioSpec, world: Any) -> None:
+    def teardown(
+        self,
+        scenario: ScenarioSpec,
+        world: Any,
+        connection_manager: ConnectionManager,
+    ) -> None:
         context = ComponentContext(
             scenario=scenario,
             world=world,
             vehicle_spec=self.vehicle,
             component_spec=self.component,
             actor=self.actor,
+            connection_manager=connection_manager,
         )
         self.behaviour.teardown(context)
         timing_registry = scenario.properties.get("_component_timing")
@@ -173,6 +197,10 @@ class Scheduler:
     scenario: ScenarioSpec
     registry: BehaviourRegistry = field(default_factory=BehaviourRegistry.with_default_behaviours)
     _components: List[_ComponentRuntime] = field(default_factory=list)
+    _connection_manager: ConnectionManager = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._connection_manager = ConnectionManager(self.scenario)
 
     def bind_vehicle(self, vehicle: VehicleSpec, actor: Any) -> None:
         for component in vehicle.components:
@@ -244,12 +272,13 @@ class Scheduler:
             self._components.append(runtime)
 
     def step(self, world: Any, sim_time: float, dt: float) -> None:
+        self._connection_manager.advance(sim_time)
         for runtime in self._components:
-            runtime.step(self.scenario, world, sim_time, dt)
+            runtime.step(self.scenario, world, sim_time, dt, self._connection_manager)
 
     def teardown(self, world: Any) -> None:
         for runtime in self._components:
-            runtime.teardown(self.scenario, world)
+            runtime.teardown(self.scenario, world, self._connection_manager)
 
     def components(self) -> Iterable[_ComponentRuntime]:
         return tuple(self._components)

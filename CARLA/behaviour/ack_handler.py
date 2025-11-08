@@ -11,6 +11,8 @@ from .common import (
     OVERTAKE_REQUEST_KEY,
     call_tm_method,
     connections_by_src,
+    consume_connection_events,
+    emit_connection_event,
     ensure_overtake_state,
     resolve_traffic_manager,
     timedelta_to_seconds,
@@ -26,6 +28,7 @@ class AckHandlerBehaviour(BaseBehaviour):
         self._acknowledged = False
         self._latency_budgets: Dict[str, Optional[float]] = {}
         self._delay_logged = False
+        self._pending_request: Optional[Dict[str, Any]] = None
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' ready to handle overtaking acknowledgements", context.vehicle_spec.name)
@@ -46,15 +49,26 @@ class AckHandlerBehaviour(BaseBehaviour):
     def tick(self, context: ComponentContext, dt: float) -> None:  # noqa: ARG002 - behaviour API
         state = ensure_overtake_state(context)
 
+        for delivery in consume_connection_events(context):
+            payload = delivery.payload
+            if isinstance(payload, dict):
+                context.scenario.properties[OVERTAKE_REQUEST_KEY] = payload
+                self._pending_request = payload
+            else:
+                LOGGER.debug(
+                    "Received unsupported payload '%r' on overtaking request connection", payload
+                )
+
         if state.get("phase") == "idle":
             self._acknowledged = False
             self._delay_logged = False
+            self._pending_request = None
             return
 
         if self._acknowledged:
             return
 
-        request = context.scenario.properties.get(OVERTAKE_REQUEST_KEY)
+        request = self._pending_request or context.scenario.properties.get(OVERTAKE_REQUEST_KEY)
         if not isinstance(request, dict):
             return
 
@@ -85,10 +99,12 @@ class AckHandlerBehaviour(BaseBehaviour):
             "request": request,
         }
 
+        emit_connection_event(context, ack_payload)
         context.scenario.properties[OVERTAKE_ACK_KEY] = ack_payload
         state["phase"] = "acknowledged"
         state["ack_count"] = int(state.get("ack_count", 0)) + 1
         self._acknowledged = True
+        self._pending_request = None
         LOGGER.info(
             "Vehicle '%s' granted overtaking permission to '%s'",
             context.vehicle_spec.name,

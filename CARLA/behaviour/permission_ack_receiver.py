@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from .base import BaseBehaviour, ComponentContext
-from .common import OVERTAKE_ACK_KEY, component_output_buffer
+from .common import consume_connection_events, emit_connection_event
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,39 +17,41 @@ class PermissionAckReceiverBehaviour(BaseBehaviour):
         self._last_signature: str | None = None
 
     def tick(self, context: ComponentContext, dt: float) -> None:  # noqa: ARG002 - behaviour API
-        properties = getattr(context.scenario, "properties", None)
-        if not isinstance(properties, dict):
-            LOGGER.debug("Scenario properties missing; cannot observe permission acknowledgements")
+        deliveries = consume_connection_events(context)
+        if not deliveries:
             return
 
-        ack_payload = properties.get(OVERTAKE_ACK_KEY)
-        if not isinstance(ack_payload, dict):
-            return
+        for delivery in deliveries:
+            ack_payload = delivery.payload
+            if not isinstance(ack_payload, dict):
+                LOGGER.debug(
+                    "Discarding non-dict payload '%r' received on permission acknowledgement", ack_payload
+                )
+                continue
 
-        if ack_payload.get("to_vehicle") not in {None, context.vehicle_spec.name}:
-            return
+            if ack_payload.get("to_vehicle") not in {None, context.vehicle_spec.name}:
+                continue
 
-        signature = self._serialise_payload(ack_payload)
-        if signature == self._last_signature:
-            return
+            signature = self._serialise_payload(ack_payload)
+            if signature == self._last_signature:
+                continue
 
-        event = {
-            "type": "permission_ack",
-            "vehicle": context.vehicle_spec.name,
-            "component": context.component_spec.name,
-            "from_vehicle": ack_payload.get("from_vehicle"),
-            "payload": ack_payload,
-        }
+            event = {
+                "type": "permission_ack",
+                "vehicle": context.vehicle_spec.name,
+                "component": context.component_spec.name,
+                "from_vehicle": ack_payload.get("from_vehicle"),
+                "payload": ack_payload,
+            }
 
-        buffer = component_output_buffer(context)
-        buffer.append(event)
+            emit_connection_event(context, event)
 
-        self._last_signature = signature
-        LOGGER.info(
-            "Vehicle '%s' received overtaking acknowledgement from '%s'",
-            context.vehicle_spec.name,
-            ack_payload.get("from_vehicle"),
-        )
+            self._last_signature = signature
+            LOGGER.info(
+                "Vehicle '%s' received overtaking acknowledgement from '%s'",
+                context.vehicle_spec.name,
+                ack_payload.get("from_vehicle"),
+            )
 
     @staticmethod
     def _serialise_payload(payload: Any) -> str:

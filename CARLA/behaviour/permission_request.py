@@ -13,6 +13,7 @@ from .common import (
     OVERTAKE_REQUEST_KEY,
     call_tm_method,
     connections_by_src,
+    emit_connection_event,
     ensure_overtake_state,
     relative_state,
     resolve_traffic_manager,
@@ -138,6 +139,7 @@ class PermissionRequestBehaviour(BaseBehaviour):
         if metrics:
             payload["relative_pose"] = metrics
 
+        emit_connection_event(context, payload)
         context.scenario.properties[OVERTAKE_REQUEST_KEY] = payload
 
         state = ensure_overtake_state(context)
