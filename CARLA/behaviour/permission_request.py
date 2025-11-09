@@ -15,6 +15,8 @@ from .common import (
     connections_by_src,
     emit_connection_event,
     ensure_overtake_state,
+    next_pipeline_request_id,
+    record_pipeline_stage,
     relative_state,
     resolve_traffic_manager,
     resolve_vehicle_actor,
@@ -32,6 +34,7 @@ class PermissionRequestBehaviour(BaseBehaviour):
         self._lead_vehicle: Optional[str] = None
         self._latency_budgets: Dict[str, Optional[float]] = {}
         self._carla_unavailable = False
+        self._active_request_id: Optional[int] = None
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' ready to issue overtaking request", context.vehicle_spec.name)
@@ -82,6 +85,8 @@ class PermissionRequestBehaviour(BaseBehaviour):
                 state["cooldown"] = cooldown
                 return
             self._request_active = False
+            state.pop("active_request_id", None)
+            self._active_request_id = None
 
         if self._request_active or state.get("phase") != "idle":
             return
@@ -125,6 +130,7 @@ class PermissionRequestBehaviour(BaseBehaviour):
         metrics: Optional[Dict[str, float]] = None,
         reason: str,
     ) -> None:
+        request_id = next_pipeline_request_id(context)
         payload = {
             "from_vehicle": context.vehicle_spec.name,
             "to_vehicle": self._lead_vehicle,
@@ -135,6 +141,7 @@ class PermissionRequestBehaviour(BaseBehaviour):
             "priority": context.component_spec.priority,
             "link_budgets_s": dict(self._latency_budgets),
             "reason": reason,
+            "request_id": request_id,
         }
         if metrics:
             payload["relative_pose"] = metrics
@@ -146,10 +153,18 @@ class PermissionRequestBehaviour(BaseBehaviour):
         state["phase"] = "awaiting_ack"
         state["lead_vehicle"] = self._lead_vehicle
         state["overtaker"] = context.vehicle_spec.name
+        state["active_request_id"] = request_id
         state.pop("cooldown", None)
         state["request_count"] = int(state.get("request_count", 0)) + 1
 
         self._request_active = True
+        self._active_request_id = request_id
+        record_pipeline_stage(
+            context,
+            "Perception_B",
+            request_id,
+            metadata={"trigger_reason": reason},
+        )
         LOGGER.info(
             "Vehicle '%s' requested overtaking permission from '%s' (%s)",
             context.vehicle_spec.name,

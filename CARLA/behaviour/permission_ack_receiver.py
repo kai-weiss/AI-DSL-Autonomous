@@ -5,7 +5,12 @@ import logging
 from typing import Any
 
 from .base import BaseBehaviour, ComponentContext
-from .common import consume_connection_events, emit_connection_event
+from .common import (
+    consume_connection_events,
+    emit_connection_event,
+    ensure_overtake_state,
+    record_pipeline_stage,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +41,11 @@ class PermissionAckReceiverBehaviour(BaseBehaviour):
             if signature == self._last_signature:
                 continue
 
+            request = ack_payload.get("request")
+            request_id = ack_payload.get("request_id")
+            if request_id is None and isinstance(request, dict):
+                request_id = request.get("request_id")
+
             event = {
                 "type": "permission_ack",
                 "vehicle": context.vehicle_spec.name,
@@ -43,6 +53,12 @@ class PermissionAckReceiverBehaviour(BaseBehaviour):
                 "from_vehicle": ack_payload.get("from_vehicle"),
                 "payload": ack_payload,
             }
+
+            if request_id is not None:
+                event["request_id"] = request_id
+                state = ensure_overtake_state(context)
+                state["active_request_id"] = request_id
+                record_pipeline_stage(context, "PermissionAckRx_B", request_id)
 
             emit_connection_event(context, event)
 

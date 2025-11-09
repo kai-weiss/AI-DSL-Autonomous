@@ -6,6 +6,7 @@ from typing import Any, Optional
 import carla
 
 from .base import BaseBehaviour, ComponentContext
+from .common import record_collision_event
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,6 +18,8 @@ class EmergencyStopBehaviour(BaseBehaviour):
         self._sensor: Any = None
         self._collision_detected = False
         self._emergency_brake_applied = False
+        self._collision_logged = False
+        self._last_other_actor: Any = None
 
     def setup(self, context: ComponentContext) -> None:
         actor = context.actor
@@ -50,6 +53,8 @@ class EmergencyStopBehaviour(BaseBehaviour):
                 getattr(event, "other_actor", None),
             )
             self._collision_detected = True
+            self._collision_logged = False
+            self._last_other_actor = getattr(event, "other_actor", None)
 
         try:
             sensor.listen(_on_collision)
@@ -65,6 +70,10 @@ class EmergencyStopBehaviour(BaseBehaviour):
         LOGGER.info("Emergency stop collision monitoring enabled for vehicle '%s'", context.vehicle_spec.name)
 
     def tick(self, context: ComponentContext, dt: float) -> None:  # noqa: ARG002 - behaviour API
+        if self._collision_detected and not self._collision_logged:
+            record_collision_event(context, other_actor=self._last_other_actor)
+            self._collision_logged = True
+
         if not self._collision_detected or self._emergency_brake_applied:
             return
         self._perform_emergency_stop(context)
@@ -73,6 +82,8 @@ class EmergencyStopBehaviour(BaseBehaviour):
         self._shutdown_sensor()
         self._collision_detected = False
         self._emergency_brake_applied = False
+        self._collision_logged = False
+        self._last_other_actor = None
 
     # ------------------------------------------------------------------
     # Internal helpers

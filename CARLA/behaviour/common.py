@@ -20,6 +20,8 @@ CARLA_CLIENT_PROPERTY = "_carla_client"
 OVERTAKE_STATE_KEY = "_overtake_state"
 OVERTAKE_REQUEST_KEY = "overtake_request"
 OVERTAKE_ACK_KEY = "permission_ack"
+PIPELINE_LOG_KEY = "_overtake_pipeline"
+COLLISION_LOG_KEY = "_collision_events"
 COMPONENT_OUTPUTS_KEY = "_component_outputs"
 
 
@@ -92,6 +94,70 @@ def consume_connection_events(
     if manager is None:
         return []
     return manager.consume(context.component_spec, connection_name)
+
+def _pipeline_registry(context: ComponentContext) -> Dict[str, Any]:
+    registry = context.scenario.properties.get(PIPELINE_LOG_KEY)
+    if not isinstance(registry, dict):
+        registry = {"events": [], "next_request_id": 1}
+        context.scenario.properties[PIPELINE_LOG_KEY] = registry
+    events = registry.get("events")
+    if not isinstance(events, list):
+        events = []
+        registry["events"] = events
+    if "next_request_id" not in registry:
+        registry["next_request_id"] = 1
+    return registry
+
+
+def next_pipeline_request_id(context: ComponentContext) -> int:
+    registry = _pipeline_registry(context)
+    request_id = int(registry.get("next_request_id", 1))
+    registry["next_request_id"] = request_id + 1
+    return request_id
+
+
+def record_pipeline_stage(
+    context: ComponentContext,
+    stage: str,
+    request_id: int,
+    *,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    registry = _pipeline_registry(context)
+    event: Dict[str, Any] = {
+        "stage": stage,
+        "request_id": int(request_id),
+        "time": float(getattr(context, "sim_time", 0.0) or 0.0),
+        "vehicle": context.vehicle_spec.name,
+        "component": context.component_spec.name,
+    }
+    if metadata:
+        event.update(metadata)
+    events = registry.setdefault("events", [])
+    if isinstance(events, list):
+        events.append(event)
+    else:
+        registry["events"] = [event]
+
+
+def record_collision_event(
+    context: ComponentContext,
+    *,
+    other_actor: Any = None,
+) -> None:
+    properties = context.scenario.properties
+    events = properties.get(COLLISION_LOG_KEY)
+    if not isinstance(events, list):
+        events = []
+        properties[COLLISION_LOG_KEY] = events
+    event: Dict[str, Any] = {
+        "vehicle": context.vehicle_spec.name,
+        "component": context.component_spec.name,
+        "time": float(getattr(context, "sim_time", 0.0) or 0.0),
+    }
+    if other_actor is not None:
+        event["other_actor"] = getattr(other_actor, "id", None) or str(other_actor)
+    events.append(event)
 
 
 def ensure_overtake_state(context: ComponentContext) -> Dict[str, Any]:

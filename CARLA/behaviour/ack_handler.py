@@ -14,6 +14,7 @@ from .common import (
     consume_connection_events,
     emit_connection_event,
     ensure_overtake_state,
+    record_pipeline_stage,
     resolve_traffic_manager,
     timedelta_to_seconds,
 )
@@ -75,6 +76,8 @@ class AckHandlerBehaviour(BaseBehaviour):
         if request.get("to_vehicle") not in {None, context.vehicle_spec.name}:
             return
 
+        request_id = request.get("request_id") if isinstance(request, dict) else None
+
         actor = context.actor
         if actor is not None and self._should_delay_for_curve(actor):
             if not self._delay_logged:
@@ -99,12 +102,19 @@ class AckHandlerBehaviour(BaseBehaviour):
             "request": request,
         }
 
+        if request_id is not None:
+            ack_payload["request_id"] = request_id
+
         emit_connection_event(context, ack_payload)
         context.scenario.properties[OVERTAKE_ACK_KEY] = ack_payload
         state["phase"] = "acknowledged"
         state["ack_count"] = int(state.get("ack_count", 0)) + 1
+        if request_id is not None:
+            state["active_request_id"] = request_id
         self._acknowledged = True
         self._pending_request = None
+        if request_id is not None:
+            record_pipeline_stage(context, "AckHandler_A", request_id)
         LOGGER.info(
             "Vehicle '%s' granted overtaking permission to '%s'",
             context.vehicle_spec.name,

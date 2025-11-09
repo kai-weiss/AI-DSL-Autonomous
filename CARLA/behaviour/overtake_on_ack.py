@@ -15,6 +15,7 @@ from .common import (
     OVERTAKE_REQUEST_KEY,
     call_tm_method,
     ensure_overtake_state,
+    record_pipeline_stage,
     relative_state,
     resolve_traffic_manager,
     resolve_vehicle_actor,
@@ -38,6 +39,7 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         self._target_lane_id: Optional[int] = None
         self._overtake_direction: Optional[str] = None
         self._stuck_timer = 0.0
+        self._active_request_id: Optional[int] = None
 
     def setup(self, context: ComponentContext) -> None:
         LOGGER.info("Vehicle '%s' waiting for overtaking permission", context.vehicle_spec.name)
@@ -46,6 +48,11 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         state.setdefault("overtaker", context.vehicle_spec.name)
 
         self._lead_vehicle = self._lead_vehicle or state.get("lead_vehicle")
+        if "active_request_id" in state:
+            try:
+                self._active_request_id = int(state["active_request_id"])
+            except (TypeError, ValueError):
+                self._active_request_id = None
 
     def tick(self, context: ComponentContext, dt: float) -> None:
         state = ensure_overtake_state(context)
@@ -75,6 +82,16 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
 
         self._lead_vehicle = ack_payload.get("from_vehicle") or self._lead_vehicle
         traffic_manager = resolve_traffic_manager(context, context.vehicle_spec.name)
+
+        request = ack_payload.get("request") if isinstance(ack_payload, dict) else None
+        request_id = ack_payload.get("request_id")
+        if request_id is None and isinstance(request, dict):
+            request_id = request.get("request_id")
+        if request_id is not None:
+            self._active_request_id = request_id
+            state = ensure_overtake_state(context)
+            state["active_request_id"] = request_id
+            record_pipeline_stage(context, "TrajectoryPlanner_B", request_id)
 
         if carla is not None:
             try:  # pragma: no cover - depends on CARLA API
@@ -451,6 +468,12 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         else:
             self._manual_control = True
             self._stuck_timer = 0.0
+            if self._active_request_id is not None:
+                record_pipeline_stage(
+                    context,
+                    "Controller_B",
+                    int(self._active_request_id),
+                )
 
     def _finish_overtake(self, context: ComponentContext, force: bool = False) -> None:
         actor = context.actor
@@ -495,3 +518,4 @@ class OvertakeOnAckBehaviour(BaseBehaviour):
         self._target_lane_id = None
         self._overtake_direction = None
         self._stuck_timer = 0.0
+        self._active_request_id = None
