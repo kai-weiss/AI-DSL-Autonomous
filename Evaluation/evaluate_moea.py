@@ -100,14 +100,13 @@ def _hypervolume_with_fallback(
             scale = base_volume / fallback_volume
             return hv_fallback * scale
 
-    local_ref = np.max(front, axis=0) * 1.1
-    local_mins, _ = _min_max_params(front)
-    local_volume = _bounding_box_volume(local_ref, local_mins)
-    if local_volume > 0.0 and math.isfinite(local_volume):
-        hv_local = hypervolume_2d(front, tuple(local_ref))
-        if hv_local > 0.0:
-            scale = base_volume / local_volume
-            return hv_local * scale
+    base_ranges = np.maximum(base_ref - base_mins, 1e-12)
+    front_span = np.maximum(np.max(front, axis=0) - base_mins, 1e-12)
+    effective_span = np.maximum(front_span, base_ranges)
+    coverage = np.clip(base_ranges / effective_span, 0.0, 1.0)
+    fallback_value = base_volume * float(np.prod(coverage))
+    if math.isfinite(fallback_value):
+        return fallback_value
 
     return 0.0
 
@@ -1321,7 +1320,7 @@ def main():
     parser.add_argument(
         "--algorithms",
         nargs="+",
-        default=['random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'],
+        default=['nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'],  # 'random_search',
         # 'random_search', 'nsga2', 'sms-emoa', 'qehvi', 'moead', 'eps-constraint'
         help="Algorithms to evaluate",
     )
