@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, List
 
 from .behaviour import BehaviourRegistry, ComponentBehaviour, ComponentContext
+from .behaviour.common import OVERTAKE_REQUEST_KEY, OVERTAKE_STATE_KEY
 from .connections import ConnectionManager
 from .model import ComponentSpec, ScenarioSpec, VehicleSpec
 
@@ -30,18 +31,42 @@ class _ComponentRuntime:
     wcet_overruns: int = 0
     total_execution_time_s: float = 0.0
     last_execution_time_s: float | None = None
+    timing_armed: bool = False
+
 
     def _component_key(self) -> str:
         return f"{self.vehicle.name}:{self.component.name}"
 
-    def _run_tick(self, context: ComponentContext, duration_s: float | None) -> tuple[float, bool]:
+    def _timing_active(self, scenario: ScenarioSpec) -> bool:
+        state = scenario.properties.get(OVERTAKE_STATE_KEY)
+        if isinstance(state, dict):
+            phase = state.get("phase")
+            if phase == "idle" or phase is None:
+                self.timing_armed = False
+            else:
+                self.timing_armed = True
+        elif scenario.properties.get(OVERTAKE_REQUEST_KEY):
+            # Fall back to the legacy flag while the overtake state registry is initialised.
+            self.timing_armed = True
+        else:
+            self.timing_armed = False
+        return self.timing_armed
+
+    def _run_tick(
+        self,
+        context: ComponentContext,
+        duration_s: float | None,
+        *,
+        collect_timing: bool,
+    ) -> tuple[float, bool]:
         start_wall = time.perf_counter()
         self.behaviour.tick(context, duration_s)
         elapsed = time.perf_counter() - start_wall
-        self.last_execution_time_s = elapsed
-        self.total_execution_time_s += elapsed
+        if collect_timing:
+            self.last_execution_time_s = elapsed
+            self.total_execution_time_s += elapsed
         wcet_overrun = False
-        if self.wcet_s is not None and elapsed > self.wcet_s + 1e-9:
+        if collect_timing and self.wcet_s is not None and elapsed > self.wcet_s + 1e-9:
             self.wcet_overruns += 1
             wcet_overrun = True
             LOGGER.warning(
@@ -60,7 +85,11 @@ class _ComponentRuntime:
         activation_start: float,
         elapsed: float,
         wcet_overrun: bool,
+        *,
+        collect_timing: bool,
     ) -> None:
+        if not collect_timing:
+            return
         deadline_missed = False
         if self.next_deadline is not None:
             if sim_time > self.next_deadline + 1e-9:
@@ -129,34 +158,59 @@ class _ComponentRuntime:
             connection_manager=connection_manager,
             sim_time=sim_time,
         )
+        collect_timing = self._timing_active(scenario)
         if self.period_s is None:
             activation_start = sim_time
             self.last_release = activation_start
-            if self.deadline_s is not None:
+            if collect_timing and self.deadline_s is not None:
                 self.next_deadline = self.last_release + self.deadline_s
             else:
                 self.next_deadline = None
-            elapsed, wcet_overrun = self._run_tick(context, dt)
-            self.activation_count += 1
-            self._record_metrics(scenario, sim_time, activation_start, elapsed, wcet_overrun)
+            elapsed, wcet_overrun = self._run_tick(
+                context,
+                dt,
+                collect_timing=collect_timing,
+            )
+            if collect_timing:
+                self.activation_count += 1
+            self._record_metrics(
+                scenario,
+                sim_time,
+                activation_start,
+                elapsed,
+                wcet_overrun,
+                collect_timing=collect_timing,
+            )
             connection_manager.advance(sim_time)
             return
 
         if self.next_activation is None:
-            self.next_activation = 0.0
+            self.next_activation = max(sim_time, 0.0)
 
         # Trigger the behaviour for every elapsed period
         while self.next_activation is not None and sim_time + 1e-9 >= self.next_activation:
             activation_time = self.next_activation
             self.last_release = activation_time
-            if self.deadline_s is not None:
+            if collect_timing and self.deadline_s is not None:
                 self.next_deadline = self.last_release + self.deadline_s
             else:
                 self.next_deadline = None
             activation_start = sim_time
-            elapsed, wcet_overrun = self._run_tick(context, self.period_s)
-            self.activation_count += 1
-            self._record_metrics(scenario, sim_time, activation_start, elapsed, wcet_overrun)
+            elapsed, wcet_overrun = self._run_tick(
+                context,
+                self.period_s,
+                collect_timing=collect_timing,
+            )
+            if collect_timing:
+                self.activation_count += 1
+            self._record_metrics(
+                scenario,
+                sim_time,
+                activation_start,
+                elapsed,
+                wcet_overrun,
+                collect_timing=collect_timing,
+            )
             self.next_activation += self.period_s
             connection_manager.advance(sim_time)
 

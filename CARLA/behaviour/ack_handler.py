@@ -41,9 +41,9 @@ class AckHandlerBehaviour(BaseBehaviour):
         actor = context.actor
         traffic_manager = resolve_traffic_manager(context, context.vehicle_spec.name)
         if traffic_manager is not None and actor is not None:
-            if call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, 45.0):
+            if call_tm_method(traffic_manager, "vehicle_percentage_speed_difference", actor, 65.0):
                 LOGGER.info(
-                    "Configured vehicle '%s' as slow lead (speed offset +45%%)",
+                    "Configured vehicle '%s' as slow lead (speed offset +65%%)",
                     context.vehicle_spec.name,
                 )
 

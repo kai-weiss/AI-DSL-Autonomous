@@ -6,19 +6,21 @@
     "A": {
       "blueprint": "vehicle.mini.cooper",
       "autopilot": false,
-      "spawn": { "map_point": 7 },
-      "components": ["Setup_A", "Perception_A", "AckHandler_A"]
+      "spawn": { "map_point": 47},
+      "components": ["Setup_A", "InteriorLight_A", "Perception_A", "AckHandler_A"]
     },
     "B": {
       "blueprint": "vehicle.lincoln.mkz",
       "autopilot": false,
-      "spawn": { "like_vehicle": "A", "delay": 8.0 },
+      "spawn": { "like_vehicle": "A", "delay": 7.0 },
       "components": [
         "Setup_B",
+        "Crash_B",
         "Perception_B",
         "PermissionReqTx_B",
         "PermissionAckRx_B",
-        "TrajectoryPlanner_B"
+        "TrajectoryPlanner_B",
+        "Controller_B"
       ]
     }
   },
