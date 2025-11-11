@@ -26,7 +26,7 @@ from CARLA.model import ScenarioSpec, SpawnPointSpec
 
 LOGGER = logging.getLogger(__name__)
 
-DEFAULT_INPUT_DIR = Path("Data/CARLAInput")
+DEFAULT_INPUT_DIR = Path(Path(__file__).resolve().parents[1] / "Data" / "CARLAInput")
 PIPELINE_STAGES: tuple[str, ...] = (
     "Perception_B",
     "AckHandler_A",
@@ -35,6 +35,8 @@ PIPELINE_STAGES: tuple[str, ...] = (
     "Controller_B",
 )
 PIPELINE_LATENCY_BOUND_S = 0.149
+
+DEFAULT_SCENARIOS: list[str] = ["test3.json", "test3.json", "test3.json", "test3.json"]
 
 
 @dataclass(slots=True)
@@ -77,7 +79,8 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "scenarios",
         metavar="SCENARIO",
-        nargs=4,
+        nargs="*",
+        default=[],
         help=(
             "Scenario identifiers or JSON paths under Data/CARLAInput. "
             "Specify four entries to evaluate."
@@ -89,8 +92,10 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         metavar="INDEX",
         nargs=3,
         type=int,
-        required=True,
-        help="Three spawn point indices for vehicle A (map_point values).",
+        default=[10, 47, 123],
+        help=(
+            "Three spawn point indices for vehicle A (map_point values). "
+        ),
     )
     parser.add_argument(
         "--base-dir",
@@ -103,13 +108,13 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=5.0,
+        default=300.0,
         help="CARLA client timeout in seconds",
     )
     parser.add_argument(
         "--duration",
         type=float,
-        default=60.0,
+        default=30.0,
         help="Maximum simulation duration in seconds per run",
     )
     parser.add_argument(
@@ -129,7 +134,12 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
         help="Logging verbosity",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    if not args.scenarios:
+        args.scenarios = list(DEFAULT_SCENARIOS)
+
+    return args
 
 
 def configure_logging(level: str) -> None:
