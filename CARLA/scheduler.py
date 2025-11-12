@@ -229,11 +229,6 @@ class _ComponentRuntime:
             connection_manager=connection_manager,
         )
         self.behaviour.teardown(context)
-        timing_registry = scenario.properties.get("_component_timing")
-        if isinstance(timing_registry, dict):
-            timing_registry.pop(self._component_key(), None)
-            if not timing_registry:
-                scenario.properties.pop("_component_timing", None)
         self.next_activation = None
         self.last_release = None
         self.next_deadline = None
