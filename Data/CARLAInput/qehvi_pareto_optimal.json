@@ -1,0 +1,160 @@
+{
+  "system": "qehvi_pareto_optimal.adsl",
+  "world": {
+    "map": "Town10HD_Opt",
+    "synchronous_mode": true,
+    "fixed_delta_seconds": 0.05
+  },
+  "vehicles": {
+    "A": {
+      "blueprint": "vehicle.mini.cooper",
+      "autopilot": false,
+      "spawn": {
+        "map_point": 7
+      },
+      "components": [
+        "Setup_A",
+        "Perception_A",
+        "InteriorLight_A",
+        "AckHandler_A"
+      ]
+    },
+    "B": {
+      "blueprint": "vehicle.lincoln.mkz",
+      "autopilot": false,
+      "spawn": {
+        "like_vehicle": "A",
+        "delay": 7.0
+      },
+      "components": [
+        "Setup_B",
+        "Crash_B",
+        "Perception_B",
+        "PermissionReqTx_B",
+        "PermissionAckRx_B",
+        "TrajectoryPlanner_B",
+        "Controller_B"
+      ]
+    }
+  },
+  "components": [
+    {
+      "name": "Perception_A",
+      "vehicle": "A",
+      "behaviour": "autopilot",
+      "period": "60ms",
+      "deadline": "50ms",
+      "wcet": "6ms",
+      "priority": 5
+    },
+    {
+      "name": "InteriorLight_A",
+      "vehicle": "A",
+      "behaviour": "interior_light",
+      "period": "40ms",
+      "deadline": "60ms",
+      "wcet": "10ms",
+      "priority": 10
+    },
+    {
+      "name": "AckHandler_A",
+      "vehicle": "A",
+      "behaviour": "ack_handler",
+      "deadline": "15ms",
+      "wcet": "2ms",
+      "priority": 2
+    },
+    {
+      "name": "Crash_B",
+      "vehicle": "B",
+      "behaviour": "emergency_stop",
+      "deadline": "40ms",
+      "wcet": "8ms",
+      "priority": 1
+    },
+    {
+      "name": "Perception_B",
+      "vehicle": "B",
+      "behaviour": "autopilot",
+      "period": "60ms",
+      "deadline": "50ms",
+      "wcet": "6ms",
+      "priority": 5
+    },
+    {
+      "name": "PermissionReqTx_B",
+      "vehicle": "B",
+      "behaviour": "request_permission",
+      "deadline": "15ms",
+      "wcet": "5ms",
+      "priority": 1
+    },
+    {
+      "name": "PermissionAckRx_B",
+      "vehicle": "B",
+      "behaviour": "permission_ack_receiver",
+      "deadline": "15ms",
+      "wcet": "5ms",
+      "priority": 3
+    },
+    {
+      "name": "TrajectoryPlanner_B",
+      "vehicle": "B",
+      "behaviour": "tm_overtake_on_ack",
+      "period": "30ms",
+      "deadline": "45ms",
+      "wcet": "8ms",
+      "priority": 4
+    },
+    {
+      "name": "Controller_B",
+      "vehicle": "B",
+      "behaviour": "constant_velocity",
+      "deadline": "80ms",
+      "wcet": "15ms",
+      "priority": 5
+    },
+    {
+      "name": "Setup_A",
+      "vehicle": "A",
+      "behaviour": "tm_autopilot_setup_A",
+      "config": {
+        "ignore_lights_percentage": 0
+      }
+    },
+    {
+      "name": "Setup_B",
+      "vehicle": "B",
+      "behaviour": "tm_autopilot_setup_B",
+      "config": {
+        "ignore_lights_percentage": 0
+      }
+    }
+  ],
+  "connections": [
+    {
+      "name": "OvertakeRequest",
+      "src": "B.PermissionReqTx_B",
+      "dst": "A.AckHandler_A",
+      "latency_budget": "4ms"
+    },
+    {
+      "name": "PermissionAck",
+      "src": "A.AckHandler_A",
+      "dst": "B.PermissionAckRx_B",
+      "latency_budget": "16ms"
+    },
+    {
+      "name": "PlanTrigger",
+      "src": "B.PermissionAckRx_B",
+      "dst": "B.TrajectoryPlanner_B",
+      "latency_budget": "2ms"
+    },
+    {
+      "name": "ControllerTrigger",
+      "src": "B.TrajectoryPlanner_B",
+      "dst": "B.Controller_B",
+      "latency_budget": "60ms"
+    }
+  ]
+}

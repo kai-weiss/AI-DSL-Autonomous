@@ -16,6 +16,7 @@ import json
 import logging
 import multiprocessing as mp
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -40,7 +41,10 @@ PIPELINE_STAGES: tuple[str, ...] = (
 )
 PIPELINE_LATENCY_BOUND_S = 0.149
 
-DEFAULT_SCENARIOS: list[str] = ["test3.json"]
+DEFAULT_SCENARIOS: list[str] = ["Overtaking_Hard.json",
+                                "nsga2_best_end2end_latency.json",
+                                "nsga2_min_core_utilisation.json",
+                                "nsga2_pareto_optimal.json"]
 DEFAULT_SPAWN_INDICES: tuple[int, ...] = (10, 47, 123)
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_S = 20.0
@@ -479,37 +483,49 @@ def evaluate_run(
 
     base_duration = duration if duration is not None else 0.0
     grace_period = max(10.0, base_duration * 0.25)
-    join_timeout = max(30.0, base_duration + grace_period)
+    setup_allowance = max(30.0, base_duration * 0.5)
+    join_timeout = max(30.0, base_duration + grace_period + setup_allowance)
+    deadline = time.monotonic() + join_timeout
 
-    process.join(join_timeout)
     result: Optional[EvaluationResult] = None
 
-    if process.is_alive():
-        LOGGER.error(
-            "Scenario '%s' at spawn index %s exceeded wall-clock timeout %.2fs; terminating",
-            scenario_path.name,
-            spawn_index,
-            join_timeout,
-        )
-        process.terminate()
+    while True:
+        if result is not None:
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        if parent_conn.poll(remaining):
+            result = EvaluationResult(**parent_conn.recv())
+            break
+        if not process.is_alive():
+            break
+
+    if result is not None:
         process.join()
-    elif process.exitcode == 0:
-        if parent_conn.poll():
-            payload = parent_conn.recv()
-            result = EvaluationResult(**payload)
-        else:
+    else:
+        if process.is_alive():
+            LOGGER.error(
+                "Scenario '%s' at spawn index %s exceeded wall-clock timeout %.2fs; terminating",
+                scenario_path.name,
+                spawn_index,
+                join_timeout,
+            )
+            process.terminate()
+            process.join()
+        elif process.exitcode == 0:
             LOGGER.error(
                 "Scenario '%s' at spawn index %s completed without returning results",
                 scenario_path.name,
                 spawn_index,
             )
-    else:
-        LOGGER.error(
-            "Scenario '%s' at spawn index %s failed in worker process (exit code %s)",
-            scenario_path.name,
-            spawn_index,
-            process.exitcode,
-        )
+        else:
+            LOGGER.error(
+                "Scenario '%s' at spawn index %s failed in worker process (exit code %s)",
+                scenario_path.name,
+                spawn_index,
+                process.exitcode,
+            )
 
     parent_conn.close()
     process.close()
