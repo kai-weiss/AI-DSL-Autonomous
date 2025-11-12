@@ -460,7 +460,8 @@ def wilcoxon_signed_rank(x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
     if variance == 0:
         return statistic, 1.0
     z = (abs(w_pos - expected) - 0.5) / math.sqrt(variance)
-    cdf = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+    z_abs = abs(z)
+    cdf = 0.5 * (1.0 + math.erf(z_abs / math.sqrt(2.0)))
     p_value = 2.0 * (1.0 - cdf)
     return statistic, max(0.0, min(1.0, p_value))
 
