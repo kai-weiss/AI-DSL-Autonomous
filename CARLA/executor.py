@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .behaviour import BehaviourRegistry, CARLA_CLIENT_PROPERTY
+from .behaviour.common import TRAFFIC_MANAGER_CACHE_KEY, TRAFFIC_MANAGER_PORTS_KEY
 from .model import LocationSpec, RotationSpec, ScenarioSpec, SpawnPointSpec, VehicleSpec
 from .scheduler import Scheduler
 
@@ -77,6 +78,11 @@ class CarlaScenarioExecutor:
             self._scheduler.teardown(self._world)
         finally:
             self._destroy_actors()
+            properties = getattr(self.scenario, "properties", None)
+            if isinstance(properties, dict):
+                # Regression: ensure TrafficManager instances do not persist between runs.
+                properties.pop(TRAFFIC_MANAGER_CACHE_KEY, None)
+                properties.pop(TRAFFIC_MANAGER_PORTS_KEY, None)
             if self._original_settings is not None:
                 try:
                     self._world.apply_settings(self._original_settings)
@@ -445,6 +451,14 @@ class CarlaScenarioExecutor:
             if actor is None:
                 continue
             try:
+                disable_autopilot = getattr(actor, "set_autopilot", None)
+                if callable(disable_autopilot):
+                    try:
+                        disable_autopilot(False)
+                    except Exception:  # pragma: no cover - depends on CARLA API
+                        LOGGER.exception(
+                            "Failed to disable autopilot for vehicle '%s' before destroy", name
+                        )
                 actor.destroy()
                 LOGGER.debug("Destroyed actor for vehicle '%s'", name)
             except Exception:  # pragma: no cover - depends on CARLA API
