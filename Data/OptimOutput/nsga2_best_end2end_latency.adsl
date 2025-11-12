@@ -1,0 +1,129 @@
+SYSTEM Overtaking_Hard {
+    CPU {
+        scheduler = LIMITED_PREEMPTIVE_FP;
+        class_order = [ SafetyCritical > Chain > BestEffort ];
+    }
+
+    VEHICLE A {
+        COMPONENT Perception_A {
+            period = 59ms;
+            deadline = 50ms;
+            WCET = 7ms;
+            priority = 5;
+            class = BestEffort;
+        }
+
+        COMPONENT InteriorLight_A {
+            period = 40ms;
+            deadline = 60ms;
+            WCET = 10ms;
+            priority = 10;
+            class = BestEffort;
+        }
+
+        COMPONENT AckHandler_A {
+            deadline = 15ms;
+            WCET = 1ms;
+            priority = 2;
+            class = Chain;
+        }
+    }
+
+    VEHICLE B {
+        COMPONENT Crash_B {
+            deadline = 40ms;
+            WCET = 6ms;
+            priority = 1;
+            class = SafetyCritical;
+        }
+
+        COMPONENT Perception_B {
+            period = 46ms;
+            deadline = 50ms;
+            WCET = 6ms;
+            priority = 5;
+            class = BestEffort;
+        }
+
+        COMPONENT PermissionReqTx_B {
+            deadline = 15ms;
+            WCET = 1ms;
+            priority = 1;
+            class = Chain;
+        }
+
+        COMPONENT PermissionAckRx_B {
+            deadline = 15ms;
+            WCET = 3ms;
+            priority = 3;
+            class = Chain;
+        }
+
+        COMPONENT TrajectoryPlanner_B {
+            period = 29ms;
+            deadline = 45ms;
+            WCET = 8ms;
+            priority = 4;
+            class = Chain;
+        }
+
+        COMPONENT Controller_B {
+            deadline = 80ms;
+            WCET = 16ms;
+            priority = 5;
+            class = Chain;
+        }
+    }
+
+    CONNECT OvertakeRequest: B.PermissionReqTx_B.output -> A.AckHandler_A.input {
+        latency_budget = 9ms;
+    }
+
+    CONNECT PermissionAck: A.AckHandler_A.output -> B.PermissionAckRx_B.input {
+        latency_budget = 9ms;
+    }
+
+    CONNECT PlanTrigger: B.PermissionAckRx_B.output -> B.TrajectoryPlanner_B.input {
+        latency_budget = 4ms;
+    }
+
+    CONNECT ControllerTrigger: B.TrajectoryPlanner_B.output -> B.Controller_B.input {
+        latency_budget = 60ms;
+    }
+
+    PROPERTY EndToEndLatency:
+      "PIPELINE PermissionReqTx_B
+                     -> AckHandler_A
+                     -> PermissionAckRx_B
+                     -> TrajectoryPlanner_B
+                     -> Controller_B
+             WITHIN 149ms";
+
+    OPTIMISATION {
+        VARIABLES {
+            A.Perception_A.period range 33ms .. 60ms;
+            B.Perception_B.period range 33ms .. 60ms;
+            B.TrajectoryPlanner_B.period range 10ms .. 30ms;
+            A.Perception_A.WCET range 6ms .. 15ms;
+            B.Perception_B.WCET range 6ms .. 15ms;
+            B.Crash_B.WCET range 3ms .. 8ms;
+            B.PermissionReqTx_B.WCET range 1ms .. 5ms;
+            A.AckHandler_A.WCET range 1ms .. 5ms;
+            B.PermissionAckRx_B.WCET range 1ms .. 5ms;
+            B.TrajectoryPlanner_B.WCET range 8ms .. 18ms;
+            B.Controller_B.WCET range 15ms .. 30ms;
+            OvertakeRequest.latency_budget range 4ms .. 16ms;
+            PermissionAck.latency_budget range 4ms .. 16ms;
+            PlanTrigger.latency_budget range 2ms .. 6ms;
+            ControllerTrigger.latency_budget range 60ms .. 110ms;
+        }
+        OBJECTIVES{
+            minimise worst_end2end_latency;
+            minimise max_core_utilisation;
+        }
+        CONSTRAINTS{
+            assert EndToEndLatency;
+            assert deadline_misses == 0;
+        }
+    }
+}
