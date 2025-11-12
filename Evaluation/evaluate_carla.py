@@ -14,9 +14,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing as mp
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+
+from multiprocessing.connection import Connection
 
 from CARLA.behaviour.common import COLLISION_LOG_KEY, PIPELINE_LOG_KEY
 from CARLA.executor import CarlaScenarioExecutor
@@ -36,8 +40,10 @@ PIPELINE_STAGES: tuple[str, ...] = (
 )
 PIPELINE_LATENCY_BOUND_S = 0.149
 
-DEFAULT_SCENARIOS: list[str] = ["test3.json", "test3.json", "test3.json", "test3.json"]
-
+DEFAULT_SCENARIOS: list[str] = ["test3.json"]
+DEFAULT_SPAWN_INDICES: tuple[int, ...] = (10, 47, 123)
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY_S = 20.0
 
 @dataclass(slots=True)
 class EvaluationResult:
@@ -73,6 +79,20 @@ class EvaluationResult:
             "successful_overtake": self.successful,
         }
 
+    def as_payload(self) -> Dict[str, Any]:
+        return {
+            "scenario_name": self.scenario_name,
+            "scenario_path": self.scenario_path,
+            "spawn_index": self.spawn_index,
+            "deadline_miss_rate": self.deadline_miss_rate,
+            "deadline_misses": self.deadline_misses,
+            "deadline_activations": self.deadline_activations,
+            "pipeline_miss_rate": self.pipeline_miss_rate,
+            "pipeline_misses": self.pipeline_misses,
+            "pipeline_requests": self.pipeline_requests,
+            "pipeline_details": self.pipeline_details,
+            "collisions": self.collisions,
+        }
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -90,9 +110,9 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
         "--spawn",
         dest="spawn_points",
         metavar="INDEX",
-        nargs=3,
+        nargs="+",
         type=int,
-        default=[10, 47, 123],
+        default=list(DEFAULT_SPAWN_INDICES),
         help=(
             "Three spawn point indices for vehicle A (map_point values). "
         ),
@@ -130,10 +150,29 @@ def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default="DEBUG",
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
         help="Logging verbosity",
     )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=DEFAULT_RETRY_ATTEMPTS,
+        help=(
+            "Maximum number of attempts for each scenario/spawn combination "
+            "when transient errors occur (default: %(default)s)."
+        ),
+    )
+    parser.add_argument(
+        "--retry-delay",
+        type=float,
+        default=DEFAULT_RETRY_DELAY_S,
+        help=(
+            "Base delay in seconds between retry attempts. The actual wait "
+            "scales linearly with the attempt number (default: %(default).1f)."
+        ),
+    )
+
     args = parser.parse_args(argv)
 
     if not args.scenarios:
@@ -308,7 +347,7 @@ def collect_collision_events(scenario: ScenarioSpec) -> List[Dict[str, Any]]:
     return collisions
 
 
-def evaluate_run(
+def _execute_spawn_run(
     scenario_path: Path,
     spawn_index: int,
     *,
@@ -324,6 +363,7 @@ def evaluate_run(
         scenario.name,
         spawn_index,
     )
+
     run_scenario(
         scenario,
         host=host,
@@ -331,6 +371,12 @@ def evaluate_run(
         timeout=timeout,
         duration=duration,
         max_steps=max_steps,
+    )
+
+    LOGGER.info(
+        "Finished scenario '%s' at spawn index %s",
+        scenario.name,
+        spawn_index,
     )
 
     deadline_rate, deadline_misses, deadline_activations = compute_deadline_metrics(scenario)
@@ -352,6 +398,123 @@ def evaluate_run(
         pipeline_details=pipeline_details,
         collisions=collisions,
     )
+
+def _spawn_worker(
+    result_conn: Connection,
+    *,
+    log_level: str,
+    scenario_path: Path,
+    spawn_index: int,
+    host: str,
+    port: int,
+    timeout: float,
+    duration: float,
+    max_steps: Optional[int],
+) -> None:
+    try:
+        configure_logging(log_level)
+    except Exception:
+        # Fall back to INFO if logging configuration fails for any reason.
+        configure_logging("INFO")
+
+    try:
+        result = _execute_spawn_run(
+            scenario_path,
+            spawn_index,
+            host=host,
+            port=port,
+            timeout=timeout,
+            duration=duration,
+            max_steps=max_steps,
+        )
+    except Exception:
+        LOGGER.exception(
+            "Worker failed while evaluating scenario '%s' at spawn index %s",
+            scenario_path,
+            spawn_index,
+        )
+        result_conn.close()
+        os._exit(2)
+    else:
+        try:
+            result_conn.send(result.as_payload())
+        finally:
+            result_conn.close()
+        os._exit(0)
+
+
+def evaluate_run(
+    scenario_path: Path,
+    spawn_index: int,
+    *,
+    host: str,
+    port: int,
+    timeout: float,
+    duration: float,
+    max_steps: Optional[int],
+    log_level: str,
+) -> Optional[EvaluationResult]:
+    ctx = mp.get_context("spawn")
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
+    process = ctx.Process(
+        target=_spawn_worker,
+        args=(
+            child_conn,
+        ),
+        kwargs={
+            "log_level": log_level,
+            "scenario_path": scenario_path,
+            "spawn_index": spawn_index,
+            "host": host,
+            "port": port,
+            "timeout": timeout,
+            "duration": duration,
+            "max_steps": max_steps,
+        },
+        daemon=False,
+    )
+
+    process.start()
+    child_conn.close()
+
+    base_duration = duration if duration is not None else 0.0
+    grace_period = max(10.0, base_duration * 0.25)
+    join_timeout = max(30.0, base_duration + grace_period)
+
+    process.join(join_timeout)
+    result: Optional[EvaluationResult] = None
+
+    if process.is_alive():
+        LOGGER.error(
+            "Scenario '%s' at spawn index %s exceeded wall-clock timeout %.2fs; terminating",
+            scenario_path.name,
+            spawn_index,
+            join_timeout,
+        )
+        process.terminate()
+        process.join()
+    elif process.exitcode == 0:
+        if parent_conn.poll():
+            payload = parent_conn.recv()
+            result = EvaluationResult(**payload)
+        else:
+            LOGGER.error(
+                "Scenario '%s' at spawn index %s completed without returning results",
+                scenario_path.name,
+                spawn_index,
+            )
+    else:
+        LOGGER.error(
+            "Scenario '%s' at spawn index %s failed in worker process (exit code %s)",
+            scenario_path.name,
+            spawn_index,
+            process.exitcode,
+        )
+
+    parent_conn.close()
+    process.close()
+
+    return result
 
 
 def print_summary(results: Iterable[EvaluationResult]) -> None:
@@ -431,6 +594,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     results: List[EvaluationResult] = []
 
     for scenario_path in scenario_paths:
+        LOGGER.info(
+            "Evaluating scenario '%s' across %d spawn points",
+            scenario_path.name,
+            len(args.spawn_points),
+        )
         for spawn_index in args.spawn_points:
             try:
                 result = evaluate_run(
@@ -441,6 +609,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                     timeout=args.timeout,
                     duration=args.duration,
                     max_steps=args.max_steps,
+                    log_level=args.log_level,
                 )
             except Exception:  # pragma: no cover - runtime interaction with CARLA
                 LOGGER.exception(
@@ -449,9 +618,18 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                     spawn_index,
                 )
                 continue
+            if result is None:
+                LOGGER.warning(
+                    "Skipping metrics for scenario '%s' at spawn index %s due to worker failure",
+                    scenario_path,
+                    spawn_index,
+                )
+                continue
             results.append(result)
 
-    print_summary(results)
+            LOGGER.info("Completed evaluation of scenario '%s'", scenario_path.name)
+
+        print_summary(results)
 
     if args.output_json:
         write_json_report(args.output_json, results)
