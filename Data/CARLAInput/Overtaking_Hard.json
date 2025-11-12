@@ -1,5 +1,5 @@
 {
-  "system": "Overtaking_Hard",
+  "system": "Overtaking_Hard_Baseline",
   "world": {
     "map": "Town10HD_Opt",
     "synchronous_mode": true,
@@ -24,7 +24,7 @@
       "autopilot": false,
       "spawn": {
         "like_vehicle": "A",
-        "delay": 8.0
+        "delay": 7.0
       },
       "components": [
         "Setup_B",
@@ -134,26 +134,26 @@
   "connections": [
     {
       "name": "OvertakeRequest",
-      "src": "B.PermissionReqTx_B.output",
-      "dst": "A.AckHandler_A.input",
+      "src": "B.PermissionReqTx_B",
+      "dst": "A.AckHandler_A",
       "latency_budget": "8ms"
     },
     {
       "name": "PermissionAck",
-      "src": "A.AckHandler_A.output",
-      "dst": "B.PermissionAckRx_B.input",
+      "src": "A.AckHandler_A",
+      "dst": "B.PermissionAckRx_B",
       "latency_budget": "8ms"
     },
     {
       "name": "PlanTrigger",
-      "src": "B.PermissionAckRx_B.output",
-      "dst": "B.TrajectoryPlanner_B.input",
+      "src": "B.PermissionAckRx_B",
+      "dst": "B.TrajectoryPlanner_B",
       "latency_budget": "3ms"
     },
     {
       "name": "ControllerTrigger",
-      "src": "B.TrajectoryPlanner_B.output",
-      "dst": "B.Controller_B.input",
+      "src": "B.TrajectoryPlanner_B",
+      "dst": "B.Controller_B",
       "latency_budget": "80ms"
     }
   ]
