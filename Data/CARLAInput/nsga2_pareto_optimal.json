@@ -42,8 +42,8 @@
       "name": "Perception_A",
       "vehicle": "A",
       "behaviour": "autopilot",
-      "period": "59ms",
-      "deadline": "50ms",
+      "period": "46ms",
+      "deadline": "56ms",
       "wcet": "7ms",
       "priority": 5
     },
@@ -51,49 +51,49 @@
       "name": "InteriorLight_A",
       "vehicle": "A",
       "behaviour": "interior_light",
-      "period": "40ms",
-      "deadline": "60ms",
-      "wcet": "10ms",
+      "period": "46ms",
+      "deadline": "66ms",
+      "wcet": "9ms",
       "priority": 10
     },
     {
       "name": "AckHandler_A",
       "vehicle": "A",
       "behaviour": "ack_handler",
-      "deadline": "15ms",
-      "wcet": "1ms",
+      "deadline": "17ms",
+      "wcet": "2ms",
       "priority": 2
     },
     {
       "name": "Crash_B",
       "vehicle": "B",
       "behaviour": "emergency_stop",
-      "deadline": "40ms",
-      "wcet": "6ms",
+      "deadline": "44ms",
+      "wcet": "9ms",
       "priority": 1
     },
     {
       "name": "Perception_B",
       "vehicle": "B",
       "behaviour": "autopilot",
-      "period": "46ms",
-      "deadline": "50ms",
-      "wcet": "6ms",
+      "period": "44ms",
+      "deadline": "54ms",
+      "wcet": "7ms",
       "priority": 5
     },
     {
       "name": "PermissionReqTx_B",
       "vehicle": "B",
       "behaviour": "request_permission",
-      "deadline": "15ms",
-      "wcet": "1ms",
+      "deadline": "17ms",
+      "wcet": "3ms",
       "priority": 1
     },
     {
       "name": "PermissionAckRx_B",
       "vehicle": "B",
       "behaviour": "permission_ack_receiver",
-      "deadline": "15ms",
+      "deadline": "17ms",
       "wcet": "3ms",
       "priority": 3
     },
@@ -101,8 +101,8 @@
       "name": "TrajectoryPlanner_B",
       "vehicle": "B",
       "behaviour": "tm_overtake_on_ack",
-      "period": "29ms",
-      "deadline": "45ms",
+      "period": "21ms",
+      "deadline": "40ms",
       "wcet": "8ms",
       "priority": 4
     },
@@ -110,8 +110,8 @@
       "name": "Controller_B",
       "vehicle": "B",
       "behaviour": "constant_velocity",
-      "deadline": "80ms",
-      "wcet": "16ms",
+      "deadline": "66ms",
+      "wcet": "18ms",
       "priority": 5
     },
     {
@@ -136,7 +136,7 @@
       "name": "OvertakeRequest",
       "src": "B.PermissionReqTx_B",
       "dst": "A.AckHandler_A",
-      "latency_budget": "9ms"
+      "latency_budget": "6ms"
     },
     {
       "name": "PermissionAck",
@@ -148,13 +148,13 @@
       "name": "PlanTrigger",
       "src": "B.PermissionAckRx_B",
       "dst": "B.TrajectoryPlanner_B",
-      "latency_budget": "4ms"
+      "latency_budget": "3ms"
     },
     {
       "name": "ControllerTrigger",
       "src": "B.TrajectoryPlanner_B",
       "dst": "B.Controller_B",
-      "latency_budget": "60ms"
+      "latency_budget": "54ms"
     }
   ]
 }

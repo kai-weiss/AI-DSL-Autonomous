@@ -68,11 +68,11 @@ def create_plot(df: pd.DataFrame) -> plt.Figure:
         ax.plot(generations, median, label=algorithm)
         ax.fill_between(generations, q1, q3, alpha=0.0)
 
-    ax.set_title("Hypervolume Convergence by Algorithm")
+    # ax.set_title("Hypervolume Convergence by Algorithm")
     ax.set_xlabel("Generation")
     ax.set_ylabel("Hypervolume")
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-    ax.legend(loc="upper left")
+    # ax.legend(loc="upper left")
 
     fig.tight_layout()
     return fig

@@ -28,7 +28,7 @@ DEFAULT_VEHICLE_BLUEPRINTS = {
 
 DEFAULT_VEHICLE_SPAWNS: dict[str, dict[str, Any]] = {
     "A": {"map_point": 7},
-    "B": {"like_vehicle": "A", "delay": 8.0},
+    "B": {"like_vehicle": "A", "delay": 7.0},
 }
 
 DEFAULT_VEHICLE_SETUP_COMPONENTS: dict[str, dict[str, Any]] = {
@@ -69,7 +69,15 @@ def _timedelta_to_ms(value: timedelta | None) -> str | None:
     return f"{milliseconds}ms"
 
 
-def build_json_model(model) -> Dict[str, Any]:  # type: ignore[no-untyped-def]
+def _normalize_endpoint(endpoint: str) -> str:
+    """Strip optional `.input`/`.output` suffixes from connection endpoints."""
+    head, sep, tail = endpoint.rpartition(".")
+    if sep and tail in {"input", "output"}:
+        return head
+    return endpoint
+
+
+def build_json_model(model, system_name: str | None = None) -> Dict[str, Any]:
     """Translate the intermediate DSL model into the CARLA JSON schema."""
     vehicles: Dict[str, Dict[str, Any]] = {}
     for vehicle in model.vehicle_order:
@@ -121,15 +129,15 @@ def build_json_model(model) -> Dict[str, Any]:  # type: ignore[no-untyped-def]
     for conn in model.connections:
         entry = {
             "name": conn.name,
-            "src": conn.src,
-            "dst": conn.dst,
+            "src": _normalize_endpoint(conn.src),
+            "dst": _normalize_endpoint(conn.dst),
         }
         if conn.latency_budget is not None:
             entry["latency_budget"] = _timedelta_to_ms(conn.latency_budget)
         connections_json.append(entry)
 
     return {
-        "system": model.system_name,
+        "system": system_name or model.system_name,
         "world": DEFAULT_WORLD.copy(),
         "vehicles": vehicles,
         "components": components_json,
@@ -143,7 +151,7 @@ def convert_file(dsl_path: Path, output_path: Path) -> Path:
     builder = ASTBuilder()
     builder.visit(tree)
 
-    json_model = build_json_model(builder.model)
+    json_model = build_json_model(builder.model, system_name=dsl_path.name)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(json_model, indent=2) + "\n", encoding="utf-8")
     return output_path
@@ -153,7 +161,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Convert DSL scenario files to CARLA JSON inputs.")
     parser.add_argument("dsl_file",
                         nargs="?",
-                        default=Path("../Data/DSLInput/Overtaking_Hard.adsl"),
+                        default=Path("../Data/OptimOutput/moead_pareto_optimal.adsl"),
                         help="Path to the .adsl file to convert")
     parser.add_argument(
         "-o",

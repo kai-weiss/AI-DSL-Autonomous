@@ -41,10 +41,7 @@ PIPELINE_STAGES: tuple[str, ...] = (
 )
 PIPELINE_LATENCY_BOUND_S = 0.149
 
-DEFAULT_SCENARIOS: list[str] = ["Overtaking_Hard.json",
-                                "nsga2_best_end2end_latency.json",
-                                "nsga2_min_core_utilisation.json",
-                                "nsga2_pareto_optimal.json"]
+DEFAULT_SCENARIOS: list[str] = ["Overtaking_Hard.json"]
 DEFAULT_SPAWN_INDICES: tuple[int, ...] = (10, 47, 123)
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_S = 20.0
