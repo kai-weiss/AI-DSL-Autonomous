@@ -71,7 +71,7 @@ This framework is for modelling autonomous driving scenarios with a DSL, checkin
    - `evaluate_carla.py` replays CARLA experiments, collecting timing traces.
    - `plot_hv_convergence.py` visualises hypervolume convergence from previous optimisation runs.
 
-## Results
+## Results for each scenario
 ### Scenario Intersection_Easy:
 | Algorithm      |   HV (median) |   HV (IQR) | HV median 95% CI   |   IGD+ (median) |   IGD+ (IQR) | IGD+ median 95% CI   |   Runtime (median s) |   Runtime (IQR s) |   Evaluations/run |   Eval time (median s) |   Eval calls/run |   Verifyta time (median s) |   Verifyta calls/run |   Verifyta share (median %) |   Feasible calls/run |   Infeasible calls/run |   Feasibility rate (median) |
 |:---------------|--------------:|-----------:|:-------------------|----------------:|-------------:|:---------------------|---------------------:|------------------:|------------------:|-----------------------:|-----------------:|---------------------------:|---------------------:|----------------------------:|---------------------:|-----------------------:|----------------------------:|
