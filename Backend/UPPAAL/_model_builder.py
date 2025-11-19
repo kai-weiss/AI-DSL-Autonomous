@@ -244,7 +244,7 @@ class ModelBuilder:
         # ------------------------------------------------------------------
         for prop_name, prop_text in model.properties.items():
             if prop_name in queries:
-                continue # already handled (connection observers)
+                continue  # already handled (connection observers)
 
             text = prop_text.strip().strip("\"")
             if text.startswith("E") or text.startswith("A"):

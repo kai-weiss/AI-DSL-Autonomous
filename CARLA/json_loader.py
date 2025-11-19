@@ -21,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def load_scenario(source: str | Path | Mapping[str, Any]) -> ScenarioSpec:
-    """Load a :class:`ScenarioSpec` from a JSON document or path."""
+    """Load a ScenarioSpec from a JSON document or path."""
 
     if isinstance(source, Mapping):
         data = dict(source)

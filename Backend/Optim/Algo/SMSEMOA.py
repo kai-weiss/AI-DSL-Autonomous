@@ -14,7 +14,7 @@ __all__ = ["SMSEMOA"]
 
 
 class SMSEMOA:
-    """A steady-state SMS-EMOA implementation built on top of DEAP"""
+    """A steady-state SMS-EMOA implementation built on top of DEAP."""
 
     def __init__(
         self,

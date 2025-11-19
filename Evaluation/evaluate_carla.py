@@ -28,7 +28,6 @@ from CARLA.executor import CarlaScenarioExecutor
 from CARLA.json_loader import load_scenario
 from CARLA.model import ScenarioSpec, SpawnPointSpec
 
-
 LOGGER = logging.getLogger(__name__)
 
 DEFAULT_INPUT_DIR = Path(Path(__file__).resolve().parents[1] / "Data" / "CARLAInput")
@@ -45,6 +44,7 @@ DEFAULT_SCENARIOS: list[str] = ["Overtaking_Hard.json"]
 DEFAULT_SPAWN_INDICES: tuple[int, ...] = (10, 47, 123)
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_RETRY_DELAY_S = 20.0
+
 
 @dataclass(slots=True)
 class EvaluationResult:
@@ -94,6 +94,7 @@ class EvaluationResult:
             "pipeline_details": self.pipeline_details,
             "collisions": self.collisions,
         }
+
 
 def parse_args(argv: Optional[Iterable[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -225,13 +226,13 @@ def prepare_scenario(scenario_path: Path, spawn_index: int) -> ScenarioSpec:
 
 
 def run_scenario(
-    scenario: ScenarioSpec,
-    *,
-    host: str,
-    port: int,
-    timeout: float,
-    duration: float,
-    max_steps: Optional[int],
+        scenario: ScenarioSpec,
+        *,
+        host: str,
+        port: int,
+        timeout: float,
+        duration: float,
+        max_steps: Optional[int],
 ) -> None:
     executor = CarlaScenarioExecutor(scenario, host=host, port=port, timeout=timeout)
     try:
@@ -262,9 +263,9 @@ def compute_deadline_metrics(scenario: ScenarioSpec) -> tuple[float, int, int]:
 
 
 def compute_pipeline_metrics(
-    scenario: ScenarioSpec,
-    *,
-    latency_bound_s: float,
+        scenario: ScenarioSpec,
+        *,
+        latency_bound_s: float,
 ) -> tuple[float, int, int, List[Dict[str, Any]]]:
     registry = scenario.properties.get(PIPELINE_LOG_KEY)
     raw_events: List[Dict[str, Any]] = []
@@ -349,14 +350,14 @@ def collect_collision_events(scenario: ScenarioSpec) -> List[Dict[str, Any]]:
 
 
 def _execute_spawn_run(
-    scenario_path: Path,
-    spawn_index: int,
-    *,
-    host: str,
-    port: int,
-    timeout: float,
-    duration: float,
-    max_steps: Optional[int],
+        scenario_path: Path,
+        spawn_index: int,
+        *,
+        host: str,
+        port: int,
+        timeout: float,
+        duration: float,
+        max_steps: Optional[int],
 ) -> EvaluationResult:
     scenario = prepare_scenario(scenario_path, spawn_index)
     LOGGER.info(
@@ -400,17 +401,18 @@ def _execute_spawn_run(
         collisions=collisions,
     )
 
+
 def _spawn_worker(
-    result_conn: Connection,
-    *,
-    log_level: str,
-    scenario_path: Path,
-    spawn_index: int,
-    host: str,
-    port: int,
-    timeout: float,
-    duration: float,
-    max_steps: Optional[int],
+        result_conn: Connection,
+        *,
+        log_level: str,
+        scenario_path: Path,
+        spawn_index: int,
+        host: str,
+        port: int,
+        timeout: float,
+        duration: float,
+        max_steps: Optional[int],
 ) -> None:
     try:
         configure_logging(log_level)
@@ -445,15 +447,15 @@ def _spawn_worker(
 
 
 def evaluate_run(
-    scenario_path: Path,
-    spawn_index: int,
-    *,
-    host: str,
-    port: int,
-    timeout: float,
-    duration: float,
-    max_steps: Optional[int],
-    log_level: str,
+        scenario_path: Path,
+        spawn_index: int,
+        *,
+        host: str,
+        port: int,
+        timeout: float,
+        duration: float,
+        max_steps: Optional[int],
+        log_level: str,
 ) -> Optional[EvaluationResult]:
     ctx = mp.get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)

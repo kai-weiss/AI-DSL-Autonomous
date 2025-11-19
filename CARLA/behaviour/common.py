@@ -4,7 +4,6 @@ import logging
 import math
 from typing import Any, Dict, Iterable, List, Optional
 
-
 from ..model import ComponentSpec
 from .base import ComponentContext
 
@@ -66,6 +65,7 @@ def timedelta_to_seconds(value: Any) -> Optional[float]:
     except AttributeError:
         return None
 
+
 def _resolve_connection_manager(context: ComponentContext) -> "ConnectionManager | None":
     manager = getattr(context, "connection_manager", None)
     if manager is None:
@@ -76,9 +76,9 @@ def _resolve_connection_manager(context: ComponentContext) -> "ConnectionManager
 
 
 def emit_connection_event(
-    context: ComponentContext,
-    payload: Any,
-    connection_name: str | None = None,
+        context: ComponentContext,
+        payload: Any,
+        connection_name: str | None = None,
 ) -> None:
     manager = _resolve_connection_manager(context)
     if manager is None:
@@ -87,13 +87,14 @@ def emit_connection_event(
 
 
 def consume_connection_events(
-    context: ComponentContext,
-    connection_name: str | None = None,
+        context: ComponentContext,
+        connection_name: str | None = None,
 ) -> List["ConnectionDelivery"]:
     manager = _resolve_connection_manager(context)
     if manager is None:
         return []
     return manager.consume(context.component_spec, connection_name)
+
 
 def _pipeline_registry(context: ComponentContext) -> Dict[str, Any]:
     registry = context.scenario.properties.get(PIPELINE_LOG_KEY)
@@ -117,11 +118,11 @@ def next_pipeline_request_id(context: ComponentContext) -> int:
 
 
 def record_pipeline_stage(
-    context: ComponentContext,
-    stage: str,
-    request_id: int,
-    *,
-    metadata: Optional[Dict[str, Any]] = None,
+        context: ComponentContext,
+        stage: str,
+        request_id: int,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     registry = _pipeline_registry(context)
     event: Dict[str, Any] = {
@@ -141,9 +142,9 @@ def record_pipeline_stage(
 
 
 def record_collision_event(
-    context: ComponentContext,
-    *,
-    other_actor: Any = None,
+        context: ComponentContext,
+        *,
+        other_actor: Any = None,
 ) -> None:
     properties = context.scenario.properties
     events = properties.get(COLLISION_LOG_KEY)

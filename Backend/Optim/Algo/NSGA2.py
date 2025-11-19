@@ -13,7 +13,7 @@ __all__ = ["NSGAII", "Individual"]
 
 
 class NSGAII:
-    """A thin wrapper around DEAPs NSGA-II implementation"""
+    """A thin wrapper around DEAPs NSGA-II implementation."""
 
     def __init__(
         self,

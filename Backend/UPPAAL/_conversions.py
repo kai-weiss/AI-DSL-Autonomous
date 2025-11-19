@@ -10,7 +10,7 @@ _RE_MS = re.compile(r"^\s*(?P<num>[0-9]+(?:\.[0-9]+)?)\s*ms\s*$", re.I)
 
 
 def get_latency_budget(conn) -> Any | None:
-    """Return the raw value of *latency_budget* if present, else ``None``."""
+    """Return the raw value of *latency_budget* if present, else None."""
 
     for key in (
         "latency_budget_ms",
@@ -25,7 +25,7 @@ def get_latency_budget(conn) -> Any | None:
 
 
 def to_ms(value: Any | None) -> int | None:
-    """Return *value* expressed in **integer milliseconds**."""
+    """Return *value* expressed in integer milliseconds."""
 
     if value is None:
         return None

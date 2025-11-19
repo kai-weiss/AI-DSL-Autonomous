@@ -128,7 +128,7 @@ def emit_component_template(
 
 
 def emit_periodic_timer(root: ET.Element, comp_name: str, period_ms: int) -> str:
-    """Periodic timer to trigger releases"""
+    """Periodic timer to trigger releases."""
     tpl_name = f"Timer_{comp_name}"
     tpl = ET.SubElement(root, "template")
     ET.SubElement(tpl, "name").text = tpl_name
@@ -397,7 +397,7 @@ def emit_connection_driver(root: ET.Element, src_comp: str, dst_comp: str) -> st
     Connection driver: propagates done->release
     A committed intermediate state ensures
     that the release is triggered immediately after the completion
-    notification
+    notification.
     """
     tpl_name = f"Conn_{src_comp}_to_{dst_comp}"
 

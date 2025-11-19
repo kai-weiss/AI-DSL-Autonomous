@@ -496,7 +496,6 @@ def evaluate_algorithm(
         worker_threads: int | None = None,
 ):
     runner, has_gens = ALGORITHMS[key]
-    require_full_verification = key == "eps-constraint"
 
     run_records = []
     cache_totals = {

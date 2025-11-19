@@ -27,8 +27,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "Optional path to save the generated figure. If omitted, the plot is "
-            "saved as 'hv_convergence_plot.png' next to the CSV file."
+            "Optional path to save the generated figure."
         ),
     )
     parser.add_argument(
